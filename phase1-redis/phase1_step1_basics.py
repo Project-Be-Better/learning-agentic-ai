@@ -1,4 +1,5 @@
 import redis 
+import json
 from typing import Final, Optional
 
 # Redis Connection Defaults
@@ -41,7 +42,7 @@ class RedisClient:
         """
         self.client.set(key, value)
     
-    def get(self, key: str) -> Optional[str]:
+    def get(self, key: str) -> str|None:
         """
         Retrieves the value of a key. 
         Returns None if the key does not exist.
@@ -93,6 +94,32 @@ class RedisClient:
         """
         self.close()
 
+    def set_json(self, key: str, value: dict, ttl: int | None = None) -> None:
+        """
+        Serializes a Python dictionary to a JSON string and stores it in Redis.
+        
+        Args:
+            key: The Redis key.
+            value: The dictionary to store.
+            ttl: Optional time-to-live in seconds.
+        """
+        # We must serialize the dict because Redis only stores strings, bytes, or numbers.
+        serialised = json.dumps(value)
+        if ttl:
+            self.client.setex(key, ttl, serialised)
+        else:
+            self.client.set(key, serialised)
+
+    def get_json(self, key: str) -> dict | None:
+        """
+        Retrieves a JSON string from Redis and deserializes it back into a Python dictionary.
+        
+        Returns:
+            The dictionary if the key exists, None otherwise.
+        """
+        raw: str | None = self.client.get(key)
+        # Only attempt to parse if the key actually exists in Redis.
+        return json.loads(raw) if raw else None
 
 if __name__ == "__main__":
     # The 'with' statement handles the connection lifecycle for us.
@@ -114,5 +141,14 @@ if __name__ == "__main__":
         # 3. Checking Existence
         if r.exists("workshop:name"):
             print("\n[Step 3] 'workshop:name' successfully verified in Redis.")
+
+        # 4. JSON Serialization
+        print("\n[Step 4] Testing JSON serialization...")
+        user_data = {"id": 1, "name": "Agentic User", "role": "Architect"}
+        r.set_json("workshop:user:1", user_data)
+        retrieved_user = r.get_json("workshop:user:1")
+        print(f"Retrieved JSON Data: {retrieved_user}")
+        if retrieved_user == user_data:
+            print("Successfully verified JSON serialization integrity.")
             
     print("\n[Done] Connection closed automatically by the Context Manager.")
