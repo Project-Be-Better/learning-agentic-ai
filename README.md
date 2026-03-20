@@ -9,6 +9,7 @@ A walking skeleton for a **multi-agent agentic AI** application built with:
 | Message broker & result backend | Redis |
 | Relational store | PostgreSQL |
 | ORM / migrations | SQLAlchemy + Alembic |
+| UI for Redis | [Redis Commander](https://github.com/joeferner/redis-commander) |
 
 ## Project layout
 
@@ -50,8 +51,12 @@ cp .env.example .env
 ### 3. Start infrastructure
 
 ```bash
-docker compose up -d postgres redis
+docker compose up -d postgres redis redis-commander
 ```
+
+### 4. Monitor Redis (Optional)
+
+You can access the Redis Commander Web UI at [http://localhost:8081](http://localhost:8081) to browse keys and monitor Celery queues.
 
 ### 4. Start a Celery worker (locally)
 
