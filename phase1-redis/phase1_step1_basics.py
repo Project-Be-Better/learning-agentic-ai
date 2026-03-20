@@ -1,6 +1,6 @@
 import redis 
 import json
-from typing import Final, Optional
+from typing import Final
 
 # Redis Connection Defaults
 # Using Final[str] indicates these values should not be changed during runtime.
@@ -120,35 +120,3 @@ class RedisClient:
         raw: str | None = self.client.get(key)
         # Only attempt to parse if the key actually exists in Redis.
         return json.loads(raw) if raw else None
-
-if __name__ == "__main__":
-    # The 'with' statement handles the connection lifecycle for us.
-    print("--- Redis Basics Workshop ---")
-    
-    with RedisClient() as r:
-        # 1. Basic Set/Get
-        print("\n[Step 1] Setting a persistent key...")
-        r.set("workshop:name", "Exploring Redis")
-        name = r.get("workshop:name")
-        print(f"Retrieved Value: {name}")
-
-        # 2. Expiration (TTL)
-        print("\n[Step 2] Setting a temporary key (TTL=60s)...")
-        r.setex("workshop:temp", "I will vanish soon", DEFAULT_TTL)
-        temp_val = r.get("workshop:temp")
-        print(f"Retrieved Temp Value: {temp_val}")
-
-        # 3. Checking Existence
-        if r.exists("workshop:name"):
-            print("\n[Step 3] 'workshop:name' successfully verified in Redis.")
-
-        # 4. JSON Serialization
-        print("\n[Step 4] Testing JSON serialization...")
-        user_data = {"id": 1, "name": "Agentic User", "role": "Architect"}
-        r.set_json("workshop:user:1", user_data)
-        retrieved_user = r.get_json("workshop:user:1")
-        print(f"Retrieved JSON Data: {retrieved_user}")
-        if retrieved_user == user_data:
-            print("Successfully verified JSON serialization integrity.")
-            
-    print("\n[Done] Connection closed automatically by the Context Manager.")
