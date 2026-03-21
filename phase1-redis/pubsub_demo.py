@@ -38,6 +38,11 @@ def orchestrator_listener(r_client: RedisClient, channel: str) -> None:
             case "sentiment":
                 print("[Orchestrator] Sentiment done → all agents complete\n")
 
+        if event.get("final"):
+            print("[Orchestrator] Final event received → closing listener")
+            pubsub.unsubscribe()
+            break
+
 
 def safety_agent_task(r_client: RedisClient, channel: str) -> None:
     """
@@ -58,7 +63,7 @@ def safety_agent_task(r_client: RedisClient, channel: str) -> None:
     event_json = json.dumps(event)
     r_client.client.publish(channel, event_json)
 
-    events_key = f"trip:{TRIP_ID}:events"
+    events_key = RedisSchema.Trip.events_channel(TRIP_ID)
     r_client.client.lpush(events_key, json.dumps(event))
     r_client.client.expire(events_key, 120)
 
@@ -85,7 +90,7 @@ def scoring_agent_task(r_client: RedisClient, channel: str) -> None:
     event_json = json.dumps(event)
     r_client.client.publish(channel, event_json)
 
-    events_key = f"trip:{TRIP_ID}:events"
+    events_key = RedisSchema.Trip.events_channel(TRIP_ID)
     r_client.client.lpush(events_key, json.dumps(event))
     r_client.client.expire(events_key, 120)
 
@@ -109,7 +114,7 @@ def sentiment_agent_task(r_client: RedisClient, channel: str) -> None:
     event_json = json.dumps(event)
     r_client.client.publish(channel, event_json)
 
-    events_key = f"trip:{TRIP_ID}:events"
+    events_key = RedisSchema.Trip.events_channel(TRIP_ID)
     r_client.client.lpush(events_key, json.dumps(event))
     r_client.client.expire(events_key, 120)
 
