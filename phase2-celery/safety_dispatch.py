@@ -1,13 +1,10 @@
-from tasks import app, safety_task, Priority, Queue
+from tasks import app, safety_task, Priority, Queue  # 📋
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # ✋
     trip_id = "trip_001"
-    print(f"Dispatching tasks at different priorities{trip_id}...\n")
 
-    # dispatch four tasks to the SAME queue at different priorities
-    # stop the worker first, dispatch all four, then start worker
-    # so they all queue up and priority ordering is visible
-
+    # ✋ dispatch ALL four before collecting any results
+    # this is what creates queue competition
     low_result = safety_task.apply_async(
         (trip_id,), queue=Queue.SAFETY, priority=Priority.LOW
     )
@@ -21,19 +18,23 @@ if __name__ == "__main__":
         (trip_id,), queue=Queue.SAFETY, priority=Priority.CRITICAL
     )
 
-    print(f"LOW      task id → {low_result.id}")
-    print(f"MEDIUM      task id → {medium_result.id}")
-    print(f"HIGH      task id → {high_result.id}")
-    print(f"CRITICAL      task id → {critical_result.id}")
+    # 📋
+    print(f"LOW      → {low_result.id}")
+    print(f"MEDIUM   → {medium_result.id}")
+    print(f"HIGH     → {high_result.id}")
+    print(f"CRITICAL → {critical_result.id}")
+    print("\nAll queued — now watch worker terminal for processing order\n")
 
-    low_output = low_result.get(timeout=15)
-    medium_output = medium_result.get(timeout=15)
-    high_output = high_result.get(timeout=15)
-    critical_output = critical_result.get(timeout=15)
+    # ✋ collect after all four are queued
+    # each task takes 2 seconds — four tasks = 8 seconds total
+    low_output = low_result.get(timeout=30)
+    medium_output = medium_result.get(timeout=30)
+    high_output = high_result.get(timeout=30)
+    critical_output = critical_result.get(timeout=30)
 
+    # 📋
     print(f"LOW      → {low_output}")
-    print(f"MEDIUM      → {medium_output}")
-    print(f"HIGH      → {high_output}")
-    print(f"CRITICAL      → {critical_output}")
-
+    print(f"MEDIUM   → {medium_output}")
+    print(f"HIGH     → {high_output}")
+    print(f"CRITICAL → {critical_output}")
     print("\n[Done]")
