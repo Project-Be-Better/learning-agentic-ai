@@ -1,4 +1,4 @@
-from tasks import app, safety_task, CRITICAL, HIGH, MEDIUM, LOW
+from tasks import app, safety_task, Priority, Queue
 
 if __name__ == "__main__":
     trip_id = "trip_001"
@@ -8,15 +8,17 @@ if __name__ == "__main__":
     # stop the worker first, dispatch all four, then start worker
     # so they all queue up and priority ordering is visible
 
-    low_result = safety_task.apply_async((trip_id,), queue="safety_queue", priority=LOW)
+    low_result = safety_task.apply_async(
+        (trip_id,), queue=Queue.SAFETY, priority=Priority.LOW
+    )
     medium_result = safety_task.apply_async(
-        (trip_id,), queue="safety_queue", priority=MEDIUM
+        (trip_id,), queue=Queue.SAFETY, priority=Priority.MEDIUM
     )
     high_result = safety_task.apply_async(
-        (trip_id,), queue="safety_queue", priority=HIGH
+        (trip_id,), queue=Queue.SAFETY, priority=Priority.HIGH
     )
     critical_result = safety_task.apply_async(
-        (trip_id,), queue="safety_queue", priority=CRITICAL
+        (trip_id,), queue=Queue.SAFETY, priority=Priority.CRITICAL
     )
 
     print(f"LOW      task id → {low_result.id}")
