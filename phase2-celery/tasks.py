@@ -1,34 +1,47 @@
 import time
 from celery import Celery
 from typing import Final
+from enum import IntEnum, Enum
+from pydantic import BaseModel
 
-# ── CELERY APP ──────────────────────────────────────────
-# First argument: name of this module
-# broker: where tasks are queued (Redis)
-# backend: where results are stored (Redis)
+# CELERY APP
 
 app = Celery(
-    "tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0"
+    "tasks",
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/0",
 )
 
 app.conf.broker_transport_options = {
-    "priority_steps": list(range(10)),  # enable 0-9 priority levels
-    "queue_order_strategy": "priority",  # process by priority not insertion order
+    "priority_steps": list(range(10)),
+    "queue_order_strategy": "priority",
 }
 
-CRITICAL: Final[int] = 0
-HIGH: Final[int] = 3
-MEDIUM: Final[int] = 6
-LOW: Final[int] = 9
 
-# ── QUEUE NAMES ─────────────────────────────────────────
-# defined once here so dispatcher and workers always agree
-SAFETY_QUEUE = "safety_queue"
-SCORING_QUEUE = "scoring_queue"
-SENTIMENT_QUEUE = "sentiment_queue"
+# ENUMS
+# IntEnum means each value IS an int — priority=Priority.CRITICAL
+# works directly with Celery's priority parameter
+class Priority(IntEnum):
+    """
+    Task priority levels for Celery queues.
+    Lower number = higher priority. CRITICAL jumps the queue.
+    """
 
-# ← Add this for Windows
-# app.conf.worker_pool = "solo"
+    CRITICAL = 0
+    HIGH = 3
+    MEDIUM = 6
+    LOW = 9
+
+
+class Queue(str, Enum):
+    """
+    Queue name constants.
+    Each agent owns exactly one queue.
+    """
+
+    SAFETY = "safety_queue"
+    SCORING = "scoring_queue"
+    SENTIMENT = "sentiment_queue"
 
 
 # ── TASKS ───────────────────────────────────────────────
@@ -39,7 +52,7 @@ SENTIMENT_QUEUE = "sentiment_queue"
 # Any code here runs INSIDE the worker process, not the caller
 
 
-@app.task(queue=SAFETY_QUEUE, name="tracedata.safety.analyse_trip")
+@app.task(queue=Queue.SAFETY, name="tracedata.safety.analyse_trip")
 def safety_task(trip_id: str) -> dict:
     """
     Safety Agent — analyses driving events
@@ -56,7 +69,7 @@ def safety_task(trip_id: str) -> dict:
     return result
 
 
-@app.task(queue=SCORING_QUEUE, name="tracedata.scoring.score_trip")
+@app.task(queue=Queue.SCORING, name="tracedata.scoring.score_trip")
 def scoring_task(trip_id: str) -> dict:
     """
     Scoring Agent — computes overall driver score
@@ -74,7 +87,7 @@ def scoring_task(trip_id: str) -> dict:
     return result
 
 
-@app.task(queue=SENTIMENT_QUEUE, name="tracedata.sentiment.analyse_sentiment")
+@app.task(queue=Queue.SENTIMENT, name="tracedata.sentiment.analyse_sentiment")
 def sentiment_task(trip_id: str) -> dict:
     """
     Sentiment Agent — analyses driver feedback
