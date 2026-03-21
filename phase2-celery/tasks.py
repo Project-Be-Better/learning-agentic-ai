@@ -1,5 +1,6 @@
 import time
 from celery import Celery
+from typing import Final
 
 # ── CELERY APP ──────────────────────────────────────────
 # First argument: name of this module
@@ -10,6 +11,15 @@ app = Celery(
     "tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0"
 )
 
+app.conf.broker_transport_options = {
+    "priority_steps": list(range(10)),  # enable 0-9 priority levels
+    "queue_order_strategy": "priority",  # process by priority not insertion order
+}
+
+CRITICAL: Final[int] = 0
+HIGH: Final[int] = 3
+MEDIUM: Final[int] = 6
+LOW: Final[int] = 9
 
 # ── QUEUE NAMES ─────────────────────────────────────────
 # defined once here so dispatcher and workers always agree
