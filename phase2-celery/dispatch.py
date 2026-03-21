@@ -1,16 +1,25 @@
-from tasks import app, analyse_trip
+from tasks import app, safety_task, scoring_task, sentiment_task
+
 
 if __name__ == "__main__":
-    print("Dispatching task...")
+    trip_id = "trip_001"
+    print(f"Dispatching all agents for {trip_id}...\n")
 
-    # .delay() sends the task to the queue and returns immediately
-    # it does NOT wait for the result
-    result = analyse_trip.delay("trip_001", "safety")
+    safety_result = safety_task.delay(trip_id)
+    scoring_result = scoring_task.delay(trip_id)
+    sentiment_result = sentiment_task.delay(trip_id)
 
-    print(f"Task dispatched — id: {result.id}")
-    print("Waiting for result...")
+    print(f"Safety   task id → {safety_result.id}")
+    print(f"Scoring  task id → {scoring_result.id}")
+    print(f"Sentiment task id → {sentiment_result.id}")
 
-    # .get() blocks here until the worker finishes and returns the result
-    output = result.get(timeout=10)
+    print("\n Waiting for all results...\n")
 
-    print(f"Result → {output}")
+    safety_output = safety_result.get(timeout=5)
+    print(f"Safety   → {safety_output}")
+    scoring_output = scoring_result.get(timeout=10)
+    print(f"Scoring  → {scoring_output}")
+    sentiment_output = sentiment_result.get(timeout=15)
+    print(f"Sentiment → {sentiment_output}")
+
+    print("\n[Done]")
