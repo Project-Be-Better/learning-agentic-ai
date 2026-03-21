@@ -19,7 +19,7 @@ def orchestrator_listener(r_client: RedisClient, channel:str)-> None:
     pubsub = r_client.client.pubsub()
     pubsub.subscribe(channel)
 
-    print(f"[Orchestrator] Listening on → {channel}\n")
+    print(f"[Orchestrator] Listening on → {channel}\n", flush=True)
 
     for message in pubsub.listen():
         if message["type"] != "message":
@@ -29,7 +29,7 @@ def orchestrator_listener(r_client: RedisClient, channel:str)-> None:
         agent: str = event["agent"]
         status: str = event["status"]
 
-        print(f"[Orchestrator] ← {agent} reported: {status}")  
+        print(f"[Orchestrator] ← {agent} reported: {status}", flush=True)  
 
 
     
@@ -39,7 +39,7 @@ def safety_agent_task(r_client: RedisClient, channel:str)-> None:
     Simulates the Safety Agent: analyzes context and publishes a result.
     """
 
-    print("[Safety Agent]   → starting task...")
+    print("[Safety Agent]   → starting task...", flush=True)
     time.sleep(2)  
 
     event: dict = {
@@ -51,15 +51,16 @@ def safety_agent_task(r_client: RedisClient, channel:str)-> None:
     }
 
     r_client.client.publish(channel, json.dumps(event))
-    print("[Safety Agent]   → event published") 
-
+    r_client.client.lpush(f"trip:{TRIP_ID}:events", json.dumps(event))
+    print("[Safety Agent]   → event published", flush=True) 
+    time.sleep(0.1)
 
 def scoring_agent_task(r_client: RedisClient, channel:str)-> None:
     """
     Simulates the Scoring Agent: analyzes context and publishes a result
     """
 
-    print("[Scoring Agent]  → starting task...")
+    print("[Scoring Agent]  → starting task...", flush=True)
     time.sleep(3)
 
     event: dict = {
@@ -71,14 +72,16 @@ def scoring_agent_task(r_client: RedisClient, channel:str)-> None:
     }
 
     r_client.client.publish(channel, json.dumps(event))
-    print("[Scoring Agent]  → event published")
+    r_client.client.lpush(f"trip:{TRIP_ID}:events", json.dumps(event))
+    print("[Scoring Agent]  → event published", flush=True)
+    time.sleep(0.1)
 
 
 def sentiment_agent_task(r_client: RedisClient, channel:str)-> None:
     """
     Simulates the Sentiment Agent: analyzes context and publishes a result.
     """
-    print("[Sentiment Agent] → starting task...")
+    print("[Sentiment Agent] → starting task...", flush=True)
     time.sleep(4) 
 
     event: dict = {
@@ -89,8 +92,9 @@ def sentiment_agent_task(r_client: RedisClient, channel:str)-> None:
     }
 
     r_client.client.publish(channel, json.dumps(event))
-
-    print("[Sentiment Agent] → event published") 
+    r_client.client.lpush(f"trip:{TRIP_ID}:events", json.dumps(event))
+    print("[Sentiment Agent] → event published", flush=True) 
+    time.sleep(0.1)
 
 
 
@@ -115,6 +119,7 @@ def main():
         target=orchestrator_listener, 
         args=(orchestrator_client, channel)
     )
+    orchestrator_listener_thread.daemon = True 
     orchestrator_listener_thread.start()
     time.sleep(2)
 
@@ -131,7 +136,7 @@ def main():
     sentiment_thread.join()
 
     time.sleep(2)
-    print("\n[Done] Phase 1 complete.") 
+    print("\n[Done] Phase 1 complete.",  flush=True) 
 
 
 if __name__ == "__main__":
