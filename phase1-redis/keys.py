@@ -36,7 +36,9 @@ class RedisSchema:
 
         @staticmethod
         def events_channel(trip_id: str) -> str:
-            """Redis Pub/Sub channel for trip-level events (e.g., agent completion)."""
+            """
+            Redis Pub/Sub channel for trip-level events (e.g., agent completion)
+            """
             return f"trip:{trip_id}:events"
 
     class Driver:
