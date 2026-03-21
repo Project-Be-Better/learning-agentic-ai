@@ -29,7 +29,7 @@ SENTIMENT_QUEUE = "sentiment_queue"
 # Any code here runs INSIDE the worker process, not the caller
 
 
-@app.task(queue=SAFETY_QUEUE)
+@app.task(queue=SAFETY_QUEUE, name="tracedata.safety.analyse_trip")
 def safety_task(trip_id: str) -> dict:
     """
     Safety Agent — analyses driving events
@@ -46,7 +46,7 @@ def safety_task(trip_id: str) -> dict:
     return result
 
 
-@app.task(queue=SCORING_QUEUE)
+@app.task(queue=SCORING_QUEUE, name="tracedata.scoring.score_trip")
 def scoring_task(trip_id: str) -> dict:
     """
     Scoring Agent — computes overall driver score
@@ -64,7 +64,7 @@ def scoring_task(trip_id: str) -> dict:
     return result
 
 
-@app.task(queue=SENTIMENT_QUEUE)
+@app.task(queue=SENTIMENT_QUEUE, name="tracedata.sentiment.analyse_sentiment")
 def sentiment_task(trip_id: str) -> dict:
     """
     Sentiment Agent — analyses driver feedback

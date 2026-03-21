@@ -15,9 +15,9 @@ if __name__ == "__main__":
 
     print("\n Waiting for all results...\n")
 
-    safety_output = safety_result.get(timeout=5)
+    safety_output = safety_result.get(timeout=15)
     print(f"Safety   → {safety_output}")
-    scoring_output = scoring_result.get(timeout=10)
+    scoring_output = scoring_result.get(timeout=15)
     print(f"Scoring  → {scoring_output}")
     sentiment_output = sentiment_result.get(timeout=15)
     print(f"Sentiment → {sentiment_output}")
