@@ -9,6 +9,11 @@ from celery import Celery
 app = Celery(
     "tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0"
 )
+
+# ← Add this for Windows
+# app.conf.worker_pool = "solo"
+
+
 # ── TASK DEFINITION ─────────────────────────────────────
 # @app.task turns a regular function into a Celery task
 # Any code here runs INSIDE the worker process, not the caller
