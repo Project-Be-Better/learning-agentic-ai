@@ -17,21 +17,39 @@ class EventConfig(BaseModel):
 
 EVENT_MATRIX: dict[str, EventConfig] = {
     # DEVICE EVENTS
-    "collision": EventConfig("critical", "critical", 1.0),
-    "rollover": EventConfig("critical", "critical", 1.0),
-    "vehicle_offline": EventConfig("critical", "high", 0.3),
-    "harsh_brake": EventConfig("harsh_events", "high", 0.7),
-    "hard_accel": EventConfig("harsh_events", "high", 0.7),
-    "harsh_corner": EventConfig("harsh_events", "high", 0.6),
-    "speeding": EventConfig("speed_compliance", "medium", 0.5),
-    "excessive_idle": EventConfig("idle_fuel", "low", 0.2),
-    "normal_operation": EventConfig("normal_operation", "low", 0.0),
-    "start_of_trip": EventConfig("trip_lifecycle", "low", None),
-    "end_of_trip": EventConfig("trip_lifecycle", "low", None),
+    "collision": EventConfig(category="critical", priority="critical", ml_weight=1.0),
+    "rollover": EventConfig(category="critical", priority="critical", ml_weight=1.0),
+    "vehicle_offline": EventConfig(category="critical", priority="high", ml_weight=0.3),
+    "harsh_brake": EventConfig(category="harsh_events", priority="high", ml_weight=0.7),
+    "hard_accel": EventConfig(category="harsh_events", priority="high", ml_weight=0.7),
+    "harsh_corner": EventConfig(
+        category="harsh_events", priority="high", ml_weight=0.6
+    ),
+    "speeding": EventConfig(
+        category="speed_compliance", priority="medium", ml_weight=0.5
+    ),
+    "excessive_idle": EventConfig(category="idle_fuel", priority="low", ml_weight=0.2),
+    "normal_operation": EventConfig(
+        category="normal_operation", priority="low", ml_weight=0.0
+    ),
+    "start_of_trip": EventConfig(
+        category="trip_lifecycle", priority="low", ml_weight=None
+    ),
+    "end_of_trip": EventConfig(
+        category="trip_lifecycle", priority="low", ml_weight=None
+    ),
     # DRIVER GENERATED EVENTS
-    "driver_sos": EventConfig("critical", "critical", None),
-    "driver_dispute": EventConfig("driver_feedback", "high", None),
-    "driver_complaint": EventConfig("driver_feedback", "high", None),
-    "driver_feedback": EventConfig("driver_feedback", "medium", None),
-    "driver_comment": EventConfig("driver_feedback", "low", None),
+    "driver_sos": EventConfig(category="critical", priority="critical", ml_weight=None),
+    "driver_dispute": EventConfig(
+        category="driver_feedback", priority="high", ml_weight=None
+    ),
+    "driver_complaint": EventConfig(
+        category="driver_feedback", priority="high", ml_weight=None
+    ),
+    "driver_feedback": EventConfig(
+        category="driver_feedback", priority="medium", ml_weight=None
+    ),
+    "driver_comment": EventConfig(
+        category="driver_feedback", priority="low", ml_weight=None
+    ),
 }

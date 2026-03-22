@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from .enums import Priority, AgentName
+from .enums import Priority, AgentName, Source, PingType
 
 
 # RAW DEVICE PAYLOADS
@@ -54,7 +54,8 @@ class TelemetryPacket(BaseModel):
     """
 
     batch_id: str
-    source: str = "telematics_device"
+    ping_type: PingType
+    source: Source = Source.DEVICE
     is_emergency: bool = False
     event: TelemetryEvent
     evidence: Evidence | None = None
@@ -78,6 +79,8 @@ class TripEvent(BaseModel):
     category: str
     priority: Priority
     is_emergency: bool
+    ping_type: PingType  # useful for routing decisions
+    source: Source  #  audit trail
     location: Location | None = None
     details: dict = {}
     evidence: Evidence | None = None
