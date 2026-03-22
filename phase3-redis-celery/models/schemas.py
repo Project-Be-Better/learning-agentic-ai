@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from .enums import Priority, AgentName
 
 
-# RAW DEVICE PAYLOAD
+# RAW DEVICE PAYLOADS
 
 
 class Location(BaseModel):
@@ -60,7 +60,7 @@ class TelemetryPacket(BaseModel):
     evidence: Evidence | None = None
 
 
-# ── PROCESSED EVENT ──────────────────────────────────────
+# PROCESSED EVENT
 
 
 class TripEvent(BaseModel):
@@ -83,9 +83,6 @@ class TripEvent(BaseModel):
     evidence: Evidence | None = None
 
 
-# ── TRIP CONTEXT ─────────────────────────────────────────
-
-
 class TripContext(BaseModel):
     """
     Written to Redis by Orchestrator at job start.
@@ -99,7 +96,7 @@ class TripContext(BaseModel):
     event: TripEvent
 
 
-# ── AGENT RESULTS ────────────────────────────────────────
+# AGENT RESULTS
 
 
 class SafetyResult(BaseModel):
@@ -110,9 +107,6 @@ class SafetyResult(BaseModel):
     score: float
     flags: list[str]
     requires_human_review: bool
-
-
-# ── COMPLETION EVENT ─────────────────────────────────────
 
 
 class CompletionEvent(BaseModel):

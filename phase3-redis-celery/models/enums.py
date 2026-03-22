@@ -1,7 +1,7 @@
 from enum import IntEnum, Enum
 
 
-# ── ROUTING & QUEUE ENUMS ────────────────────────────────
+# ROUTING & QUEUE ENUMS
 
 
 class Priority(IntEnum):
@@ -33,7 +33,7 @@ class AgentName(str, Enum):
     SENTIMENT = "sentiment"
 
 
-# ── EVENT TYPE ENUMS ────────────────────────────────────
+# EVENT TYPE ENUMS
 
 
 class PingType(str, Enum):
