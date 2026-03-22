@@ -107,9 +107,9 @@ def seed_events(client: RedisClient) -> None:
 
 
 if __name__ == "__main__":
-    print("Seeding telemetry events into Redis buffer...\n")
+    print(">>> Seeding telemetry events into Redis buffer...\n")
 
     with RedisClient() as r:
         seed_events(r)
 
-    print("\nDone. Redis buffer ready for ingestion.")
+    print("\n>>> Done. Redis buffer ready for ingestion.")
