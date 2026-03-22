@@ -10,7 +10,7 @@ from .schemas import (
     SafetyResult,
     CompletionEvent,
 )
-from .config import EVENT_MATRIX
+from .config import EVENT_MATRIX, EventConfig
 
 __all__ = [
     # Enums
@@ -30,4 +30,5 @@ __all__ = [
     "CompletionEvent",
     # Config
     "EVENT_MATRIX",
+    "EventConfig",
 ]

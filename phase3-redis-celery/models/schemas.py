@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from .enums import Priority, AgentName
 
 
-# ── RAW DEVICE PAYLOAD ───────────────────────────────────
+# RAW DEVICE PAYLOAD
 
 
 class Location(BaseModel):
