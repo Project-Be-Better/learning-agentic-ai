@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from .enums import Priority, AgentName, Source, PingType
 
 
-# RAW DEVICE PAYLOADS
+# ── RAW DEVICE PAYLOADS ──────────────────────────────────
 
 
 class Location(BaseModel):
@@ -16,6 +16,11 @@ class TelemetryEvent(BaseModel):
     """
     Generic event schema for all telematics device events.
     details field is flexible — shape depends on event_type.
+
+    Spatio-temporal anchor fields:
+      offset_seconds  → when in the trip (time)
+      trip_meter_km   → where in the trip (distance)
+      odometer_km     → absolute vehicle lifetime distance
     """
 
     event_id: str
@@ -28,7 +33,13 @@ class TelemetryEvent(BaseModel):
     priority: str
     timestamp: str
     schema_version: str = "event_v1"
+
+    # spatio-temporal anchor — present on all device pings
+    # None for driver app events (app does not have device fields)
     offset_seconds: int | None = None
+    trip_meter_km: float | None = None
+    odometer_km: float | None = None
+
     location: Location | None = None
     details: dict = {}
 
@@ -49,8 +60,9 @@ class Evidence(BaseModel):
 
 class TelemetryPacket(BaseModel):
     """
-    Full raw payload arriving from the telematics device.
+    Full raw payload arriving from the telematics device or driver app.
     This is what gets written to the Redis telemetry buffer.
+    ping_type and source are stamped by the sender.
     """
 
     batch_id: str
@@ -61,13 +73,16 @@ class TelemetryPacket(BaseModel):
     evidence: Evidence | None = None
 
 
-# PROCESSED EVENT
+# ── PROCESSED EVENT ──────────────────────────────────────
 
 
 class TripEvent(BaseModel):
     """
     Cleaned, flat event produced by the Ingestion Tool.
     This is what the Orchestrator and agents work with.
+
+    Preserves spatio-temporal anchor from TelemetryEvent
+    for distance normalisation in fairness scoring.
     """
 
     batch_id: str
@@ -79,11 +94,20 @@ class TripEvent(BaseModel):
     category: str
     priority: Priority
     is_emergency: bool
-    ping_type: PingType  # useful for routing decisions
-    source: Source  #  audit trail
+    ping_type: PingType  # routing decisions
+    source: Source  # audit trail
+
+    # spatio-temporal anchor — preserved from TelemetryEvent
+    offset_seconds: int | None = None
+    trip_meter_km: float | None = None
+    odometer_km: float | None = None
+
     location: Location | None = None
     details: dict = {}
     evidence: Evidence | None = None
+
+
+# ── TRIP CONTEXT ─────────────────────────────────────────
 
 
 class TripContext(BaseModel):
@@ -99,7 +123,7 @@ class TripContext(BaseModel):
     event: TripEvent
 
 
-# AGENT RESULTS
+# ── AGENT RESULTS ────────────────────────────────────────
 
 
 class SafetyResult(BaseModel):
