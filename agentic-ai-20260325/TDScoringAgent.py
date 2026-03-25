@@ -16,14 +16,14 @@ class TDScoringAgent(TDAgentBase):
         Pure logic. Never sees the capsule
         """
         trip_pings = trip_context.get("trip_pings", [])
-        harsh_events = trip_context.get("harsh_events", [])
+        harsh_events = trip_context.get("harsh_events", 0)
 
         # Simple rule-based scoring
         base_score = 100
-        score = max(0, base_score - (len(harsh_events) * 5))
+        score = max(0, base_score - (harsh_events) * 5)
 
         return {
             "trip_score": score,
             "pings_count": len(trip_pings),
-            "harsh_events_count": len(harsh_events),
+            "harsh_events_count": harsh_events,
         }

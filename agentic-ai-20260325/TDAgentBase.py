@@ -35,31 +35,6 @@ class TDAgentBase(ABC):
         """
         return trip_context
 
-    def _verify_intent_capsule(self, capsule: Dict[str, Any], requested_action: str):
-        # Verify Signature
-        capsule_data = {
-            "trip_id": capsule["trip_id"],
-            "expires_at": capsule["expires_at"],
-            "allowed_actions": capsule["allowed_actions"],
-        }
-
-        expected_signature = hmac.new(
-            self.secret_key.encode(), str(capsule_data).encode(), hashlib.sha256
-        ).hexdigest()
-
-        if capsule.get("signature") != expected_signature:
-            raise SecurityError("Capsule signature mismatch. Tampering detected.")
-
-        # Check 2: Expiration
-        if capsule["expires_at"] < time.time():
-            raise SecurityError(f"Capsule expired at {capsule['expires_at']}")
-
-        # Check 3: Action bounds
-        if requested_action not in capsule.get("allowed_actions", []):
-            raise SecurityError(f"Action '{requested_action}' not allowed by capsule")
-
-        return True
-
     @verify_intent_capsule
     def run(self, state: TDAgentState) -> Dict[str, Any]:
         """
