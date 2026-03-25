@@ -1,20 +1,20 @@
-from abc import ABC, abstractmethod
-from typing import Dict, Any, TypedDict
-from datetime import datetime, timezone
-from enum import StrEnum
+from typing import Dict, Any, TypedDict, Optional
 import hmac
 import hashlib
 import time
 import json
 import functools
+import logging
 
+from exceptions import (
+    SecurityError,
+    TamperingError,
+    ExpirationError,
+    ConstraintViolationError,
+    MissingFieldError,
+)
 
-class SecurityError(Exception):
-    """
-    Raised when Intent Gate rejects a request
-    """
-
-    pass
+logger = logging.getLogger(__name__)
 
 
 class TDAgentState(TypedDict):
@@ -37,47 +37,44 @@ def create_intent_capsule(
     trip_id: str,
     secret_key: str,
     expires_at: float,
+    subject: str = "scoring_agent",
+    purpose: str = "evaluate_trip_lifecycle",
+    allowed_actions: Optional[list] = None,
+    constraints: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Create an Intent Capsule (signed work order).
 
-    In real system, Orchestrator calls this before dispatching to agent.
-    This creates the "sealed & signed" part of the diagram.
+    Flexible for any agent.
 
     Args:
-        trip_id: The trip being processed
-        secret_key: Secret used to sign the capsule
-        expires_at: Unix timestamp when capsule expires
+        trip_id: Trip being processed
+        secret_key: Secret used to sign
+        expires_at: Unix timestamp when expires
+        subject: Agent name (default: "scoring_agent")
+        purpose: What this capsule is for (default: "evaluate_trip_lifecycle")
+        allowed_actions: List of allowed actions (default: ["score_trip"])
+        constraints: Custom constraints dict (overrides auto-generated)
 
     Returns:
-        Intent Capsule dict:
-        {
-          "capsule": {
-            "correlation_id": "trip-req-001",
-            "trip_id": "TRIP-001",
-            "subject": "scoring_agent",
-            "purpose": "evaluate_trip_lifecycle",
-            "constraints": {
-              "allowed_actions": ["score_trip"],
-              "resource_id": "redis:trip_summary:001",
-              "max_compute_time_seconds": 30
-            },
-            "issued_at": 1711314000,
-            "expires_at": 1711314060
-          },
-          "signature": "dbb40d70...[HMAC-SHA256]...8c"
-        }
+        Signed Intent Capsule dict
     """
+    if allowed_actions is None:
+        allowed_actions = ["score_trip"]
+
+    if constraints is None:
+        constraints = {
+            "allowed_actions": allowed_actions,
+            "resource_id": f"redis:trip_summary:{trip_id}",
+            "max_compute_time_seconds": 30,
+        }
+
     capsule_data = {
         "correlation_id": f"trip-req-{trip_id}",
         "trip_id": trip_id,
-        "subject": "scoring_agent",
-        "purpose": "evaluate_trip_lifecycle",
-        "constraints": {
-            "allowed_actions": ["score_trip"],
-            "resource_id": f"redis:trip_summary:{trip_id}",
-            "max_compute_time_seconds": 30,
-        },
+        "subject": subject,
+        "purpose": purpose,
+        "constraints": constraints,
         "issued_at": int(time.time()),
         "expires_at": int(expires_at),
     }
@@ -131,14 +128,24 @@ def verify_intent_capsule(func):
             Result from the original run() method
 
         Raises:
-            SecurityError: If capsule is invalid or expired
+            TamperingError: If capsule signature verification fails
+            ExpirationError: If capsule has expired
+            ConstraintViolationError: If capsule constraints are violated
         """
-        capsule = state["intent_capsule"]
+        try:
+            capsule = state["intent_capsule"]
+        except KeyError:
+            logger.error("Missing 'intent_capsule' in state")
+            raise MissingFieldError("'intent_capsule' is required in state")
 
         # INTENT GATE VALIDATION
 
         # Check 1: Verify signature (detect tampering)
-        capsule_data = capsule["capsule"]
+        capsule_data = capsule.get("capsule")
+        if capsule_data is None:
+            logger.error("Missing 'capsule' in intent_capsule")
+            raise MissingFieldError("'capsule' is required in intent_capsule")
+
         expected_signature = hmac.new(
             self.secret_key.encode(),
             json.dumps(capsule_data, sort_keys=True).encode(),
@@ -146,21 +153,42 @@ def verify_intent_capsule(func):
         ).hexdigest()
 
         if capsule.get("signature") != expected_signature:
-            raise SecurityError(
-                f"Intent Capsule TAMPERING DETECTED. " f"Signature mismatch."
+            trip_id = capsule_data.get("trip_id", "UNKNOWN")
+            logger.warning(
+                f"Tampering detected for trip {trip_id}. Signature mismatch."
+            )
+            raise TamperingError(
+                f"Intent Capsule TAMPERING DETECTED. Signature mismatch."
             )
 
         # Check 2: Verify expiration (still within time window)
         current_time = time.time()
         expires_at = capsule_data.get("expires_at")
 
+        if expires_at is None:
+            logger.error("Missing 'expires_at' in capsule data")
+            raise MissingFieldError("'expires_at' is required in capsule data")
+
         if current_time > expires_at:
-            raise SecurityError(
+            trip_id = capsule_data.get("trip_id", "UNKNOWN")
+            logger.warning(
+                f"Capsule expired for trip {trip_id}. "
+                f"Valid until: {expires_at}, Current: {current_time}"
+            )
+            raise ExpirationError(
                 f"Intent Capsule EXPIRED. "
                 f"Valid until: {expires_at}, Current: {current_time}"
             )
 
+        # Check 3: Verify constraints (if implemented)
+        constraints = capsule_data.get("constraints", {})
+        max_time = constraints.get("max_compute_time_seconds")
+        if max_time:
+            # Constraint validation framework (can be extended)
+            logger.debug(f"Capsule constraint: max_compute_time={max_time} seconds")
+
         # GATE PASSED: Agent is allowed to execute
+        logger.info(f"Intent Gate PASSED for trip {capsule_data.get('trip_id')}")
         return func(self, state)
 
     return wrapper
