@@ -189,26 +189,24 @@ class TestIntentGateValidation:
         with pytest.raises(MissingFieldError):
             scoring_agent.run(trip_data)
 
-    def test_missing_trip_id_raises_error(self, scoring_agent, valid_capsule):
-        """Test that missing trip_id raises MissingFieldError."""
+    def test_missing_trip_id_raises_keyerror(self, scoring_agent, valid_capsule):
+        """Test that missing trip_id raises KeyError."""
         trip_data = {
-            # Missing: "trip_id"
             "trip_context": {"harsh_events": 0},
             "intent_capsule": valid_capsule,
         }
 
-        with pytest.raises(MissingFieldError):
+        with pytest.raises(KeyError, match="trip_id"):
             scoring_agent.run(trip_data)
 
     def test_missing_trip_context_raises_error(self, scoring_agent, valid_capsule):
-        """Test that missing trip_context raises MissingFieldError."""
+        """Test that missing trip_context raises KeyError."""
         trip_data = {
             "trip_id": "TRIP-001",
-            # Missing: "trip_context"
             "intent_capsule": valid_capsule,
         }
 
-        with pytest.raises(MissingFieldError):
+        with pytest.raises(KeyError, match="trip_context"):
             scoring_agent.run(trip_data)
 
 

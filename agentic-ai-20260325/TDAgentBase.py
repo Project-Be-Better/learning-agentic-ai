@@ -1,13 +1,9 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import StrEnum
-import logging
 
 from intent_gate import TDAgentState, verify_intent_capsule
-from exceptions import SecurityError, MissingFieldError
-
-logger = logging.getLogger(__name__)
 
 
 class TDAgentEnum(StrEnum):
@@ -40,7 +36,11 @@ class TDAgentBase(ABC):
     @verify_intent_capsule
     def run(self, state: TDAgentState) -> Dict[str, Any]:
         """
-        Public API: Run the agent with Intent Capsule in state.
+        Run the agent with Intent Capsule in state.
+
+        Pure execution: validate state → execute logic → wrap result.
+        No error handling or logging at this level.
+        (Cross-cutting concerns are handled by Orchestrator)
 
         State structure:
           - trip_id: "TRIP-001"
@@ -51,40 +51,37 @@ class TDAgentBase(ABC):
             state: The state dict containing trip info and capsule
 
         Returns:
-            Result dict with agent output and metadata
+            Result dict with agent output and metadata:
+            {
+                "agent": "scoring_agent",
+                "trip_id": "TRIP-001",
+                "timestamp": "2026-03-26T..Z",
+                "status": "SUCCESS",
+                "output": {...}  # Result from _execute_logic
+            }
 
         Raises:
-            MissingFieldError: If required fields are missing
+            KeyError: If required fields (trip_id, trip_context) are missing
+            ValueError: If trip_context is not a dictionary
+            Exception: Any exception from _execute_logic propagates
+            TamperingError: If capsule signature is invalid (@verify_intent_capsule)
+            ExpirationError: If capsule is expired (@verify_intent_capsule)
         """
-        # Validate state structure
-        try:
-            trip_id = state["trip_id"]
-            trip_context = state["trip_context"]
-        except KeyError as e:
-            logger.error(f"Missing required field in state: {e}")
-            raise MissingFieldError(f"Missing required field in state: {e}")
+        # 1. Validate state structure (fail fast)
+        trip_id = state["trip_id"]
+        trip_context = state["trip_context"]
 
         if not isinstance(trip_context, dict):
-            logger.error(f"trip_context must be a dict, got {type(trip_context)}")
             raise ValueError("trip_context must be a dictionary")
 
-        logger.debug(f"Running agent {self.agent_id} for trip {trip_id}")
+        # 2. Execute business logic
+        agent_output = self._execute_logic(trip_context)
 
-        # Step 1: Execute business logic (read trip_context only)
-        try:
-            agent_output = self._execute_logic(trip_context)
-        except Exception as e:
-            logger.error(f"Agent execution failed for trip {trip_id}: {e}")
-            raise
-
-        # Step 2: Wrap with metadata
-        result = {
+        # 3. Wrap and return
+        return {
             "agent": self.agent_id,
             "trip_id": trip_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "status": "SUCCESS",
             "output": agent_output,
         }
-
-        logger.info(f"Agent {self.agent_id} succeeded for trip {trip_id}")
-        return result
