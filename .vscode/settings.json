@@ -1,0 +1,85 @@
+{
+  // Python Essentials - Standardized for Team Development
+  // Share this file with your colleagues for consistent code style
+
+  // ===== PYTHON FORMATTING =====
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit",
+      "source.fixAll": "explicit"
+    },
+    "editor.rulers": [100]
+  },
+
+  // ===== BLACK FORMATTER =====
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": [
+    "--line-length",
+    "100"
+  ],
+
+  // ===== PYLINT LINTING =====
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true,
+  "python.linting.pylintArgs": [
+    "--disable=C0111",
+    "--disable=C0103",
+    "--disable=W0212",
+    "--max-line-length=100"
+  ],
+
+  // ===== TYPE CHECKING (Pylance) =====
+  "python.analysis.typeCheckingMode": "basic",
+  "python.analysis.diagnosticMode": "workspace",
+  "python.analysis.inlayHints.variableTypes": true,
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.extraPaths": [
+    "./src"
+  ],
+
+  // ===== TESTING (Pytest) =====
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    ".",
+    "-v",
+    "--tb=short"
+  ],
+
+  // ===== CODE STYLE =====
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.trimAutoWhitespace": true,
+  "editor.foldingStrategy": "indentation",
+
+  // ===== INTELLISENSE (Smart, Non-Aggressive) =====
+  "editor.quickSuggestions": {
+    "other": true,
+    "comments": true,
+    "strings": false
+  },
+  "editor.suggestOnTriggerCharacters": false,
+  "editor.inlineSuggest.enabled": false,
+  "editor.acceptSuggestionOnCommitCharacter": false,
+  "editor.tabCompletion": "off",
+
+  // ===== IDE & DEBUGGING =====
+  "python.debug.logToFile": false,
+
+  // ===== EXCLUDE PATTERNS =====
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    "**/.pytest_cache": true,
+    "**/.coverage": true,
+    "**/.venv": true,
+    "**/venv": true,
+    "**/*.egg-info": true
+  },
+
+  // ===== NOTEBOOK SUPPORT =====
+  "notebook.cellToolbarLocation": "left",
+  "jupyter.askForKernelRestart": false
+}
