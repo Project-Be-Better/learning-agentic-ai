@@ -5,7 +5,10 @@ from TDAgentBase import TDAgentBase
 
 class TDScoringAgent(TDAgentBase):
     """
-    Inherited from TDAgentBase
+    Scoring Agent: Scores a trip based on smoothness.
+
+    This is what a subclass looks like. Override _execute_logic() only.
+    Intent Gate protection is inherited automatically.
     """
 
     def _execute_logic(self, trip_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -13,20 +16,14 @@ class TDScoringAgent(TDAgentBase):
         Pure logic. Never sees the capsule
         """
         trip_pings = trip_context.get("trip_pings", [])
-        score = max(0, 100 - (len(trip_pings) * 2))  # Dummy logic
-        return {"trip_score": score}
+        harsh_events = trip_context.get("harsh_events", [])
 
-        # trip_id = sanitized_data.get("trip_id", "UNKNOWN")
-        # distance_km = sanitized_data.get("distance_km", 0)
-        # num_harsh_events = sanitized_data.get("harsh_events", 0)
+        # Simple rule-based scoring
+        base_score = 100
+        score = max(0, base_score - (len(harsh_events) * 5))
 
-        # Simple rule: score = 100 - (harsh_events * 5)
-        # score = max(0, 100 - (num_harsh_events * 5))
-
-        # result = {
-        #     "trip_id": f"ABCD-0000-0000-0000-{trip_id}",
-        #     "trip_score": score,
-        #     "harsh_events": num_harsh_events,
-        #     "distance_km": distance_km,
-        # }
-        # return result
+        return {
+            "trip_score": score,
+            "pings_count": len(trip_pings),
+            "harsh_events_count": len(harsh_events),
+        }
