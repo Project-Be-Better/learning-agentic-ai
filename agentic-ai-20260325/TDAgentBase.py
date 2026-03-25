@@ -1,6 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 from datetime import datetime
+from enum import StrEnum
+
+
+class TDAgentEnum(StrEnum):
+    SCORING_AGENT = "scoring_agent"
+    SAFETY_AGENT = "safety_agent"
 
 
 class TDAgentBase(ABC):
@@ -8,11 +14,11 @@ class TDAgentBase(ABC):
     Base Class
     """
 
-    def __init__(self, agent_id: str) -> None:
+    def __init__(self, agent_id: TDAgentEnum) -> None:
         """
         Constructor
         """
-        self.agent_id = agent_id
+        self.agent_id = agent_id.value
 
     @abstractmethod
     def _execute_logic(self, sanitized_data: Dict[str, Any]) -> Dict[str, Any]:
