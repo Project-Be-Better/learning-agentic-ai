@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
+from typing import Dict, Any
+from datetime import datetime
 
 
-class TDataBase(ABC):
+class TDAgentBase(ABC):
     """
     Base Class
     """
@@ -13,22 +15,28 @@ class TDataBase(ABC):
         self.agent_id = agent_id
 
     @abstractmethod
-    def _execute_method(self):
+    def _execute_logic(self, sanitized_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         The only method that should be overridden
         1. TAKE input
         2. PERFORM work
         3. RETURN output
         """
-        pass
+        return sanitized_data
 
-    def run(self):
+    def run(self, sanitized_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Public API
         4. CALLS the business logic
         5.
         6. Returns the output as JSON
-
         """
-        result = {}
+
+        agent_output = self._execute_logic(sanitized_data)
+
+        result: Dict[str, Any] = {
+            "agent": self.agent_id,
+            "timestamp": datetime.now(),
+            "output": agent_output,
+        }
         return result
