@@ -5,6 +5,7 @@ import time
 import json
 import functools
 import logging
+import uuid
 
 from exceptions import (
     SecurityError,
@@ -132,10 +133,22 @@ def verify_intent_capsule(func):
             ExpirationError: If capsule has expired
             ConstraintViolationError: If capsule constraints are violated
         """
+        security_event_id = str(uuid.uuid4())
+
         try:
             capsule = state["intent_capsule"]
         except KeyError:
-            logger.error("Missing 'intent_capsule' in state")
+            logger.error(
+                json.dumps(
+                    {
+                        "action": "intent_gate_validation",
+                        "status": "failed",
+                        "reason": "missing_intent_capsule",
+                        "security_event_id": security_event_id,
+                        "timestamp": time.time(),
+                    }
+                )
+            )
             raise MissingFieldError("'intent_capsule' is required in state")
 
         # INTENT GATE VALIDATION
@@ -143,7 +156,17 @@ def verify_intent_capsule(func):
         # Check 1: Verify signature (detect tampering)
         capsule_data = capsule.get("capsule")
         if capsule_data is None:
-            logger.error("Missing 'capsule' in intent_capsule")
+            logger.error(
+                json.dumps(
+                    {
+                        "action": "intent_gate_validation",
+                        "status": "failed",
+                        "reason": "missing_capsule_data",
+                        "security_event_id": security_event_id,
+                        "timestamp": time.time(),
+                    }
+                )
+            )
             raise MissingFieldError("'capsule' is required in intent_capsule")
 
         expected_signature = hmac.new(
@@ -155,7 +178,17 @@ def verify_intent_capsule(func):
         if capsule.get("signature") != expected_signature:
             trip_id = capsule_data.get("trip_id", "UNKNOWN")
             logger.warning(
-                f"Tampering detected for trip {trip_id}. Signature mismatch."
+                json.dumps(
+                    {
+                        "action": "intent_gate_validation",
+                        "status": "failed",
+                        "security_event_id": security_event_id,
+                        "reason": "signature_mismatch",
+                        "trip_id": trip_id,
+                        "severity": "critical",
+                        "timestamp": time.time(),
+                    }
+                )
             )
             raise TamperingError(
                 f"Intent Capsule TAMPERING DETECTED. Signature mismatch."
@@ -166,14 +199,35 @@ def verify_intent_capsule(func):
         expires_at = capsule_data.get("expires_at")
 
         if expires_at is None:
-            logger.error("Missing 'expires_at' in capsule data")
+            logger.error(
+                json.dumps(
+                    {
+                        "action": "intent_gate_validation",
+                        "status": "failed",
+                        "reason": "missing_expiry",
+                        "security_event_id": security_event_id,
+                        "timestamp": time.time(),
+                    }
+                )
+            )
             raise MissingFieldError("'expires_at' is required in capsule data")
 
         if current_time > expires_at:
             trip_id = capsule_data.get("trip_id", "UNKNOWN")
             logger.warning(
-                f"Capsule expired for trip {trip_id}. "
-                f"Valid until: {expires_at}, Current: {current_time}"
+                json.dumps(
+                    {
+                        "action": "intent_gate_validation",
+                        "status": "failed",
+                        "security_event_id": security_event_id,
+                        "reason": "capsule_expired",
+                        "trip_id": trip_id,
+                        "valid_until": expires_at,
+                        "current_time": current_time,
+                        "severity": "medium",
+                        "timestamp": time.time(),
+                    }
+                )
             )
             raise ExpirationError(
                 f"Intent Capsule EXPIRED. "
@@ -183,12 +237,35 @@ def verify_intent_capsule(func):
         # Check 3: Verify constraints (if implemented)
         constraints = capsule_data.get("constraints", {})
         max_time = constraints.get("max_compute_time_seconds")
+        trip_id = capsule_data.get("trip_id", "UNKNOWN")
+
         if max_time:
             # Constraint validation framework (can be extended)
-            logger.debug(f"Capsule constraint: max_compute_time={max_time} seconds")
+            logger.debug(
+                json.dumps(
+                    {
+                        "action": "intent_gate_validation",
+                        "status": "constraint_check",
+                        "trip_id": trip_id,
+                        "constraint": "max_compute_time",
+                        "value": max_time,
+                        "timestamp": time.time(),
+                    }
+                )
+            )
 
         # GATE PASSED: Agent is allowed to execute
-        logger.info(f"Intent Gate PASSED for trip {capsule_data.get('trip_id')}")
+        logger.info(
+            json.dumps(
+                {
+                    "action": "intent_gate_validation",
+                    "status": "passed",
+                    "security_event_id": security_event_id,
+                    "trip_id": trip_id,
+                    "timestamp": time.time(),
+                }
+            )
+        )
         return func(self, state)
 
     return wrapper

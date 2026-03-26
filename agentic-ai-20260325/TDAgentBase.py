@@ -2,8 +2,10 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any
 from datetime import datetime, timezone
 from enum import StrEnum
+import uuid
 
 from intent_gate import TDAgentState, verify_intent_capsule
+from logger import get_logger, LogContext
 
 
 class TDAgentEnum(StrEnum):
@@ -13,15 +15,20 @@ class TDAgentEnum(StrEnum):
 
 class TDAgentBase(ABC):
     """
-    Base Class
+    Base Class for all agents with integrated structured logging.
     """
 
     def __init__(self, agent_id: TDAgentEnum, secret_key: str = "dev_secret") -> None:
         """
-        Constructor
+        Constructor.
+
+        Args:
+            agent_id: Agent type enum
+            secret_key: Secret for capsule signing/verification
         """
         self.agent_id = agent_id.value
         self.secret_key = secret_key
+        self.logger = get_logger(self.__class__.__name__)
 
     @abstractmethod
     def _execute_logic(self, trip_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -39,8 +46,7 @@ class TDAgentBase(ABC):
         Run the agent with Intent Capsule in state.
 
         Pure execution: validate state → execute logic → wrap result.
-        No error handling or logging at this level.
-        (Cross-cutting concerns are handled by Orchestrator)
+        Includes structured logging for observability (ELK/PLG compatible).
 
         State structure:
           - trip_id: "TRIP-001"
@@ -67,21 +73,53 @@ class TDAgentBase(ABC):
             TamperingError: If capsule signature is invalid (@verify_intent_capsule)
             ExpirationError: If capsule is expired (@verify_intent_capsule)
         """
+        # Generate correlation ID for request tracing
+        correlation_id = str(uuid.uuid4())
+
         # 1. Validate state structure (fail fast)
         trip_id = state["trip_id"]
         trip_context = state["trip_context"]
 
         if not isinstance(trip_context, dict):
+            self.logger.error(
+                "validation_failed",
+                status="failed",
+                agent_id=self.agent_id,
+                trip_id=trip_id,
+                correlation_id=correlation_id,
+                error="trip_context must be a dictionary",
+            )
             raise ValueError("trip_context must be a dictionary")
 
-        # 2. Execute business logic
-        agent_output = self._execute_logic(trip_context)
+        # 2. Execute business logic with context tracing
+        with LogContext(
+            self.logger,
+            "agent_execution",
+            agent_id=self.agent_id,
+            trip_id=trip_id,
+            correlation_id=correlation_id,
+        ):
+            agent_output = self._execute_logic(trip_context)
 
         # 3. Wrap and return
-        return {
+        result = {
             "agent": self.agent_id,
             "trip_id": trip_id,
-            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "timestamp": datetime.now(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z"),
             "status": "SUCCESS",
             "output": agent_output,
         }
+
+        # Log successful execution
+        self.logger.info(
+            "agent_succeeded",
+            status="success",
+            agent_id=self.agent_id,
+            trip_id=trip_id,
+            correlation_id=correlation_id,
+            details={"output_keys": list(agent_output.keys())},
+        )
+
+        return result
