@@ -16,6 +16,7 @@ from models import (
 class TDAgentEnum(StrEnum):
     SCORING_AGENT = "scoring_agent"
     SAFETY_AGENT = "safety_agent"
+    ORCHESTRATOR_AGENT = "orchestrator_agent"
 
 
 class TDAgentBase(ABC):
