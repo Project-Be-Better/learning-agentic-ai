@@ -1,4 +1,4 @@
-from typing import Dict, Any, TypedDict, Optional
+from typing import Dict, Any, Optional
 import hmac
 import hashlib
 import time
@@ -14,24 +14,15 @@ from exceptions import (
     ConstraintViolationError,
     MissingFieldError,
 )
+from models import (
+    TDAgentState,
+    AgentResult,
+    IntentCapsule,
+    CapsuleData,
+    CapsuleConstraints,
+)
 
 logger = logging.getLogger(__name__)
-
-
-class TDAgentState(TypedDict):
-    """
-    Trip Info + Signed Permission
-    State passed to agent. Pure JSON-serializable data.
-
-    Fields:
-        trip_id: Unique trip identifier
-        trip_context: Pre-fetched data (pings, safety output, etc)
-        intent_capsule: Signed work order (the capsule)
-    """
-
-    trip_id: str
-    trip_context: Dict[str, Any]  # Pre-fetched data
-    intent_capsule: Dict[str, Any]  # Signed permission slip
 
 
 def create_intent_capsule(
@@ -42,7 +33,7 @@ def create_intent_capsule(
     purpose: str = "evaluate_trip_lifecycle",
     allowed_actions: Optional[list] = None,
     constraints: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> IntentCapsule:
     """
     Create an Intent Capsule (signed work order).
 
@@ -58,39 +49,45 @@ def create_intent_capsule(
         constraints: Custom constraints dict (overrides auto-generated)
 
     Returns:
-        Signed Intent Capsule dict
+        Signed IntentCapsule (Pydantic model)
     """
     if allowed_actions is None:
         allowed_actions = ["score_trip"]
 
+    # Create constraints as CapsuleConstraints model
     if constraints is None:
-        constraints = {
-            "allowed_actions": allowed_actions,
-            "resource_id": f"redis:trip_summary:{trip_id}",
-            "max_compute_time_seconds": 30,
-        }
+        constraint_model = CapsuleConstraints(
+            allowed_actions=allowed_actions,
+            resource_id=f"redis:trip_summary:{trip_id}",
+            max_compute_time_seconds=30,
+        )
+    else:
+        constraint_model = CapsuleConstraints(**constraints)
 
-    capsule_data = {
-        "correlation_id": f"trip-req-{trip_id}",
-        "trip_id": trip_id,
-        "subject": subject,
-        "purpose": purpose,
-        "constraints": constraints,
-        "issued_at": int(time.time()),
-        "expires_at": int(expires_at),
-    }
+    # Create capsule data as model
+    capsule_data_model = CapsuleData(
+        correlation_id=f"trip-req-{trip_id}",
+        trip_id=trip_id,
+        subject=subject,
+        purpose=purpose,
+        constraints=constraint_model,
+        issued_at=int(time.time()),
+        expires_at=int(expires_at),
+    )
 
-    # Sign it (HMAC-SHA256)
+    # Sign it (HMAC-SHA256) - use JSON serialization for hashing
+    capsule_dict = capsule_data_model.model_dump(mode="json")
     signature = hmac.new(
         secret_key.encode(),
-        json.dumps(capsule_data, sort_keys=True).encode(),
+        json.dumps(capsule_dict, sort_keys=True).encode(),
         hashlib.sha256,
     ).hexdigest()
 
-    return {
-        "capsule": capsule_data,
-        "signature": signature,
-    }
+    # Return Pydantic model
+    return IntentCapsule(
+        capsule=capsule_data_model,
+        signature=signature,
+    )
 
 
 def verify_intent_capsule(func):
@@ -117,16 +114,16 @@ def verify_intent_capsule(func):
     """
 
     @functools.wraps(func)
-    def wrapper(self, state: TDAgentState) -> Dict[str, Any]:
+    def wrapper(self, state: TDAgentState) -> AgentResult:
         """
         Internal: Verify capsule before agent runs.
 
         Args:
             self: The agent instance (has secret_key)
-            state: The state dict with intent_capsule
+            state: The TDAgentState (Pydantic model)
 
         Returns:
-            Result from the original run() method
+            AgentResult from the original run() method
 
         Raises:
             TamperingError: If capsule signature verification fails
@@ -135,48 +132,23 @@ def verify_intent_capsule(func):
         """
         security_event_id = str(uuid.uuid4())
 
-        try:
-            capsule = state["intent_capsule"]
-        except KeyError:
-            logger.error(
-                json.dumps(
-                    {
-                        "action": "intent_gate_validation",
-                        "status": "failed",
-                        "reason": "missing_intent_capsule",
-                        "security_event_id": security_event_id,
-                        "timestamp": time.time(),
-                    }
-                )
-            )
-            raise MissingFieldError("'intent_capsule' is required in state")
+        # Access capsule using dot notation
+        capsule = state.intent_capsule  # Now a Pydantic IntentCapsule
+        capsule_data = capsule.capsule  # CapsuleData model
+        trip_id = capsule_data.trip_id
 
         # INTENT GATE VALIDATION
 
         # Check 1: Verify signature (detect tampering)
-        capsule_data = capsule.get("capsule")
-        if capsule_data is None:
-            logger.error(
-                json.dumps(
-                    {
-                        "action": "intent_gate_validation",
-                        "status": "failed",
-                        "reason": "missing_capsule_data",
-                        "security_event_id": security_event_id,
-                        "timestamp": time.time(),
-                    }
-                )
-            )
-            raise MissingFieldError("'capsule' is required in intent_capsule")
-
+        # Recompute signature using dict serialization
+        capsule_dict = capsule_data.model_dump(mode="json")
         expected_signature = hmac.new(
             self.secret_key.encode(),
-            json.dumps(capsule_data, sort_keys=True).encode(),
+            json.dumps(capsule_dict, sort_keys=True).encode(),
             hashlib.sha256,
         ).hexdigest()
 
-        if capsule.get("signature") != expected_signature:
-            trip_id = capsule_data.get("trip_id", "UNKNOWN")
+        if capsule.signature != expected_signature:
             logger.warning(
                 json.dumps(
                     {
@@ -196,24 +168,9 @@ def verify_intent_capsule(func):
 
         # Check 2: Verify expiration (still within time window)
         current_time = time.time()
-        expires_at = capsule_data.get("expires_at")
-
-        if expires_at is None:
-            logger.error(
-                json.dumps(
-                    {
-                        "action": "intent_gate_validation",
-                        "status": "failed",
-                        "reason": "missing_expiry",
-                        "security_event_id": security_event_id,
-                        "timestamp": time.time(),
-                    }
-                )
-            )
-            raise MissingFieldError("'expires_at' is required in capsule data")
+        expires_at = capsule_data.expires_at
 
         if current_time > expires_at:
-            trip_id = capsule_data.get("trip_id", "UNKNOWN")
             logger.warning(
                 json.dumps(
                     {
@@ -235,9 +192,8 @@ def verify_intent_capsule(func):
             )
 
         # Check 3: Verify constraints (if implemented)
-        constraints = capsule_data.get("constraints", {})
-        max_time = constraints.get("max_compute_time_seconds")
-        trip_id = capsule_data.get("trip_id", "UNKNOWN")
+        constraints = capsule_data.constraints
+        max_time = constraints.max_compute_time_seconds
 
         if max_time:
             # Constraint validation framework (can be extended)

@@ -216,6 +216,19 @@ AgentException
     └── MissingFieldError
 ```
 
+## Data Models (Pydantic v2)
+
+All data structures use Pydantic v2 for type safety and runtime validation:
+
+- **TDAgentState**: Input to agent (trip_id, trip_context, intent_capsule)
+- **CapsuleData**: Signed work order payload (trip_id, subject, purpose, constraints, timestamps)
+- **CapsuleConstraints**: Execution limits (allowed_actions, resource_id, max_compute_time_seconds, max_harsh_events)
+- **IntentCapsule**: Signed capsule (capsule + HMAC-SHA256 signature)
+- **AgentOutput**: Computation result (trip_score, pings_count, harsh_events_count, action)
+- **AgentResult**: Full response with metadata (agent, trip_id, timestamp, status, correlation_id, output)
+
+All models include field validation and JSON schema export support.
+
 ## Quick Start
 
 ### Installation
@@ -227,7 +240,7 @@ uv pip install pytest pytest-cov
 ### Run Tests
 
 ```bash
-# All tests
+# All tests (33 total)
 pytest agentic-ai-20260325/test_agent_framework.py -v
 
 # Specific test class
@@ -243,7 +256,7 @@ pytest agentic-ai-20260325/test_agent_framework.py --cov
 from TDScoringAgent import TDScoringAgent
 from TDAgentBase import TDAgentEnum
 from intent_gate import create_intent_capsule
-from logger import get_logger
+from models import TDAgentState  # Pydantic models
 import time
 
 # 1. Create agent (logger automatically injected)
@@ -259,26 +272,29 @@ capsule = create_intent_capsule(
     expires_at=time.time() + 60
 )
 
-# 3. Execute with state
+# 3. Execute with Pydantic state model
 # Logs are automatically emitted as JSON with:
 # - correlation_id (uuid for request tracing)
 # - duration_ms (execution time)
 # - output details
-result = agent.run({
-    "trip_id": "TRIP-001",
-    "trip_context": {
+trip_data = TDAgentState(
+    trip_id="TRIP-001",
+    trip_context={
         "trip_pings": [1, 2, 3],
         "harsh_events": 2
     },
-    "intent_capsule": capsule
-})
+    intent_capsule=capsule
+)
 
-# Output includes metadata
-print(result["agent_id"])        # "scoring_agent"
-print(result["trip_id"])         # "TRIP-001"
-print(result["status"])          # "success"
-print(result["timestamp"])       # ISO 8601 timestamp
-print(result["output"]["trip_score"])  # 90 (100 - 2*5)
+result = agent.run(trip_data)
+
+# Output uses dot notation (Pydantic models)
+print(result.agent)              # "scoring_agent"
+print(result.trip_id)            # "TRIP-001"
+print(result.status)             # "success"
+print(result.timestamp)          # ISO 8601 timestamp with Z suffix
+print(result.output.trip_score)  # 90 (100 - 2*5)
+print(result.correlation_id)     # UUID v4 for request tracing
 
 # JSON logs output (viewable in ELK/PLG stacks):
 # {
@@ -301,12 +317,54 @@ print(result["output"]["trip_score"])  # 90 (100 - 2*5)
 
 ## Test Coverage
 
-- **18/18 tests passing** ✅
-- Intent Capsule creation & signing
-- Intent Gate validation (signature, expiration, tampering)
-- Agent execution with valid/invalid capsules
-- Scoring logic edge cases
-- Output metadata validation
+- **33/33 tests passing** ✅ (includes 15 new comprehensive tests)
+
+### Test Categories:
+
+1. **TestIntentCapsuleCreation** (2 tests)
+   - Capsule creation with valid parameters
+   - Custom parameters (subject, purpose, allowed_actions)
+
+2. **TestIntentGateValidation** (7 tests)
+   - Valid capsule passes gate
+   - Expired capsule rejected
+   - Tampered capsule detected
+   - Wrong secret key detected
+   - Missing required fields raise ValidationError
+
+3. **TestScoringAgent** (5 tests)
+   - Scoring with various harsh_events counts
+   - Score minimum capped at 0
+   - Default values for missing fields
+
+4. **TestAgentMetadata** (4 tests)
+   - Result includes agent_id, trip_id, timestamp
+   - Status always "success" on valid execution
+
+5. **TestConstraintValidation** (2 tests)
+   - max_harsh_events constraint storage
+   - All constraint fields accessible
+
+6. **TestSerialization** (3 tests)
+   - AgentResult → dict with `model_dump()`
+   - AgentResult → JSON with `model_dump_json()`
+   - JSON roundtrip deserialization
+
+7. **TestTypeValidation** (4 tests)
+   - Rejects invalid trip_id type (int instead of str)
+   - Rejects invalid trip_context type (str instead of dict)
+   - Rejects negative harsh_events_count
+   - Rejects invalid trip_score type
+
+8. **TestCorrelationID** (2 tests)
+   - Each result has a correlation_id
+   - Different executions get unique IDs
+
+9. **TestEdgeCases** (4 tests)
+   - Handles very large harsh_events (10,000+)
+   - Handles empty trip_pings list
+   - Handles very long trip IDs (1000+ chars)
+   - Handles special characters in trip IDs
 
 ## Design Principles
 

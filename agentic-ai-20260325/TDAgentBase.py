@@ -4,8 +4,13 @@ from datetime import datetime, timezone
 from enum import StrEnum
 import uuid
 
-from intent_gate import TDAgentState, verify_intent_capsule
+from intent_gate import verify_intent_capsule
 from logger import get_logger, LogContext
+from models import (
+    TDAgentState,
+    AgentResult,
+    AgentOutput,
+)
 
 
 class TDAgentEnum(StrEnum):
@@ -31,17 +36,28 @@ class TDAgentBase(ABC):
         self.logger = get_logger(self.__class__.__name__)
 
     @abstractmethod
-    def _execute_logic(self, trip_context: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_logic(self, trip_context: Dict[str, Any]) -> AgentOutput:
         """
-        The only method that should be overridden
-        1. TAKE input
+        The only method that should be overridden.
+
+        Pure logic returns AgentOutput (validated result).
+
+        1. TAKE input (trip_context)
         2. PERFORM work
-        3. RETURN output
+        3. RETURN AgentOutput
+
+        Args:
+            trip_context: Context dict with trip data
+
+        Returns:
+            AgentOutput model with results
         """
-        return trip_context
+        return AgentOutput(
+            trip_score=0, pings_count=0, harsh_events_count=0, action="score_trip"
+        )
 
     @verify_intent_capsule
-    def run(self, state: TDAgentState) -> Dict[str, Any]:
+    def run(self, state: TDAgentState) -> AgentResult:
         """
         Run the agent with Intent Capsule in state.
 
@@ -54,20 +70,12 @@ class TDAgentBase(ABC):
           - intent_capsule: {capsule_data, signature, ...}
 
         Args:
-            state: The state dict containing trip info and capsule
+            state: The TDAgentState (Pydantic model)
 
         Returns:
-            Result dict with agent output and metadata:
-            {
-                "agent": "scoring_agent",
-                "trip_id": "TRIP-001",
-                "timestamp": "2026-03-26T..Z",
-                "status": "SUCCESS",
-                "output": {...}  # Result from _execute_logic
-            }
+            AgentResult with metadata and output
 
         Raises:
-            KeyError: If required fields (trip_id, trip_context) are missing
             ValueError: If trip_context is not a dictionary
             Exception: Any exception from _execute_logic propagates
             TamperingError: If capsule signature is invalid (@verify_intent_capsule)
@@ -76,9 +84,9 @@ class TDAgentBase(ABC):
         # Generate correlation ID for request tracing
         correlation_id = str(uuid.uuid4())
 
-        # 1. Validate state structure (fail fast)
-        trip_id = state["trip_id"]
-        trip_context = state["trip_context"]
+        # 1. Validate state structure using dot notation (Pydantic validates on init)
+        trip_id = state.trip_id
+        trip_context = state.trip_context
 
         if not isinstance(trip_context, dict):
             self.logger.error(
@@ -101,16 +109,17 @@ class TDAgentBase(ABC):
         ):
             agent_output = self._execute_logic(trip_context)
 
-        # 3. Wrap and return
-        result = {
-            "agent": self.agent_id,
-            "trip_id": trip_id,
-            "timestamp": datetime.now(timezone.utc)
+        # 3. Wrap and return as AgentResult (Pydantic model)
+        result = AgentResult(
+            agent=self.agent_id,
+            trip_id=trip_id,
+            timestamp=datetime.now(timezone.utc)
             .isoformat(timespec="milliseconds")
             .replace("+00:00", "Z"),
-            "status": "SUCCESS",
-            "output": agent_output,
-        }
+            status="success",
+            correlation_id=correlation_id,
+            output=agent_output,  # Already AgentOutput model from _execute_logic
+        )
 
         # Log successful execution
         self.logger.info(
@@ -119,7 +128,7 @@ class TDAgentBase(ABC):
             agent_id=self.agent_id,
             trip_id=trip_id,
             correlation_id=correlation_id,
-            details={"output_keys": list(agent_output.keys())},
+            details={"output_keys": list(agent_output.model_dump().keys())},
         )
 
         return result

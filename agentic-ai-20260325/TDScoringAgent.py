@@ -2,6 +2,7 @@ from typing import Any, Dict
 import logging
 
 from TDAgentBase import TDAgentBase
+from models import AgentOutput
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +15,7 @@ class TDScoringAgent(TDAgentBase):
     Intent Gate protection is inherited automatically.
     """
 
-    def _execute_logic(self, trip_context: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_logic(self, trip_context: Dict[str, Any]) -> AgentOutput:
         """
         Pure logic. Never sees the capsule.
 
@@ -22,6 +23,8 @@ class TDScoringAgent(TDAgentBase):
         - Base score: 100
         - Deduction: 5 points per harsh event
         - Minimum: 0
+
+        Returns AgentOutput (validated model).
         """
         trip_pings = trip_context.get("trip_pings", [])
         harsh_events = trip_context.get("harsh_events", 0)
@@ -36,8 +39,10 @@ class TDScoringAgent(TDAgentBase):
 
         logger.debug(f"Calculated trip score: {score}")
 
-        return {
-            "trip_score": score,
-            "pings_count": len(trip_pings),
-            "harsh_events_count": harsh_events,
-        }
+        # Return as AgentOutput model (validated)
+        return AgentOutput(
+            trip_score=score,
+            pings_count=len(trip_pings),
+            harsh_events_count=harsh_events,
+            action="score_trip",
+        )
