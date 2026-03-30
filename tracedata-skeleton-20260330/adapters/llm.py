@@ -30,12 +30,32 @@ File location:
 
 import os
 from abc import ABC, abstractmethod
+from enum import StrEnum
+from typing import Any, Optional
 
 from pydantic import BaseModel
 
 # =============================================================================
 # SECTION 1: LLM ADAPTER ABC (Base class for all providers)
 # =============================================================================
+
+
+class OpenAIModel(StrEnum):
+    GPT_4 = "gpt-4"
+    GPT_4_TURBO = "gpt-4-turbo"
+    GPT_4O = "gpt-4o"
+    GPT_4O_MINI = "gpt-4o-mini"
+    GPT_35_TURBO = "gpt-3.5-turbo"
+
+
+class AnthropicModel(StrEnum):
+    CLAUDE_OPUS_20250514 = "claude-opus-20250514"
+    CLAUDE_SONNET_4_20250514 = "claude-sonnet-4-20250514"
+    CLAUDE_35_SONNET_20241022 = "claude-3-5-sonnet-20241022"
+    CLAUDE_35_HAIKU_20241022 = "claude-3-5-haiku-20241022"
+    CLAUDE_3_OPUS_20240229 = "claude-3-opus-20240229"
+    CLAUDE_3_SONNET_20240229 = "claude-3-sonnet-20240229"
+    CLAUDE_3_HAIKU_20240307 = "claude-3-haiku-20240307"
 
 
 class LLMAdapter(ABC):
@@ -81,19 +101,10 @@ class OpenAIAdapter(LLMAdapter):
     3. Default: "gpt-4o"
     """
 
-    # Default models (can be overridden)
-    DEFAULT_MODEL = "gpt-4o"
+    # Default model (can be overridden)
+    DEFAULT_MODEL = OpenAIModel.GPT_4O
 
-    # Available OpenAI models (for validation)
-    AVAILABLE_MODELS = [
-        "gpt-4",
-        "gpt-4-turbo",
-        "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-3.5-turbo",
-    ]
-
-    def __init__(self, model: str = None):
+    def __init__(self, model: str | OpenAIModel | None = None):
         """
         Initialize OpenAI adapter.
 
@@ -128,18 +139,24 @@ class OpenAIAdapter(LLMAdapter):
                 "Set it in .env.local or as environment variable."
             )
 
-        # Determine model (priority: param > env > default)
-        if model is None:
-            model = os.getenv("OPENAI_MODEL", self.DEFAULT_MODEL)
+        raw_model = (
+            model
+            if model is not None
+            else os.getenv("OPENAI_MODEL", self.DEFAULT_MODEL.value)
+        )
 
-        # Validate model
-        if model not in self.AVAILABLE_MODELS:
+        try:
+            self.model = (
+                raw_model
+                if isinstance(raw_model, OpenAIModel)
+                else OpenAIModel(raw_model)
+            )
+        except ValueError:
+            available = ", ".join(m.value for m in OpenAIModel)
             raise ValueError(
-                f"Invalid OpenAI model: {model}. "
-                f"Available models: {', '.join(self.AVAILABLE_MODELS)}"
+                f"Invalid OpenAI model: {raw_model}. Available models: {available}"
             )
 
-        self.model = model
         self.api_key = api_key
 
     def get_chat_model(self):
@@ -152,8 +169,7 @@ class OpenAIAdapter(LLMAdapter):
         from langchain_openai import ChatOpenAI
 
         return ChatOpenAI(
-            model=self.model,
-            api_key=self.api_key,
+            model=self.model.value,
             temperature=0.4,
         )
 
@@ -175,21 +191,10 @@ class AnthropicAdapter(LLMAdapter):
     3. Default: "claude-3-5-sonnet-20241022"
     """
 
-    # Default models (can be overridden)
-    DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
+    # Default model (can be overridden)
+    DEFAULT_MODEL = AnthropicModel.CLAUDE_35_SONNET_20241022
 
-    # Available Anthropic models (for validation)
-    AVAILABLE_MODELS = [
-        "claude-opus-20250514",  # Latest Opus
-        "claude-sonnet-4-20250514",  # Latest Sonnet 4
-        "claude-3-5-sonnet-20241022",  # Sonnet 3.5
-        "claude-3-5-haiku-20241022",  # Haiku 3.5
-        "claude-3-opus-20240229",  # Opus 3
-        "claude-3-sonnet-20240229",  # Sonnet 3
-        "claude-3-haiku-20240307",  # Haiku 3
-    ]
-
-    def __init__(self, model: str = None):
+    def __init__(self, model: str | AnthropicModel | None = None):
         """
         Initialize Anthropic adapter.
 
@@ -224,18 +229,24 @@ class AnthropicAdapter(LLMAdapter):
                 "Set it in .env.local or as environment variable."
             )
 
-        # Determine model (priority: param > env > default)
-        if model is None:
-            model = os.getenv("ANTHROPIC_MODEL", self.DEFAULT_MODEL)
+        raw_model = (
+            model
+            if model is not None
+            else os.getenv("ANTHROPIC_MODEL", self.DEFAULT_MODEL.value)
+        )
 
-        # Validate model
-        if model not in self.AVAILABLE_MODELS:
+        try:
+            self.model = (
+                raw_model
+                if isinstance(raw_model, AnthropicModel)
+                else AnthropicModel(raw_model)
+            )
+        except ValueError:
+            available = ", ".join(m.value for m in AnthropicModel)
             raise ValueError(
-                f"Invalid Anthropic model: {model}. "
-                f"Available models: {', '.join(self.AVAILABLE_MODELS)}"
+                f"Invalid Anthropic model: {raw_model}. Available models: {available}"
             )
 
-        self.model = model
         self.api_key = api_key
 
     def get_chat_model(self):
@@ -247,8 +258,11 @@ class AnthropicAdapter(LLMAdapter):
         """
         from langchain_anthropic import ChatAnthropic
 
-        return ChatAnthropic(
-            model=self.model,
+        # Some local type stubs infer an incompatible constructor signature.
+        # Use Any alias so runtime kwargs remain provider-accurate.
+        chat_anthropic_cls: Any = ChatAnthropic
+        return chat_anthropic_cls(
+            model=self.model.value,
             api_key=self.api_key,
             temperature=0.4,
         )
@@ -279,7 +293,7 @@ class LLMConfig(BaseModel):
 # =============================================================================
 
 
-def load_llm(provider: str = None, model: str = None) -> LLMConfig:
+def load_llm(provider: Optional[str] = None, model: Optional[str] = None) -> LLMConfig:
     """
     Load LLM adapter based on configuration.
 
@@ -351,7 +365,7 @@ def load_llm(provider: str = None, model: str = None) -> LLMConfig:
 
     return LLMConfig(
         provider=provider,
-        model=adapter.model,
+        model=adapter.model.value,
         adapter=adapter,
     )
 
@@ -417,5 +431,5 @@ if __name__ == "__main__":
     # EXAMPLE 6: Show available models
     print("\n[Example 6] Available Models")
     print("-" * 70)
-    print(f"OpenAI Models: {', '.join(OpenAIAdapter.AVAILABLE_MODELS)}")
-    print(f"\nAnthropic Models: {', '.join(AnthropicAdapter.AVAILABLE_MODELS)}\n")
+    print(f"OpenAI Models: {', '.join(m.value for m in OpenAIModel)}")
+    print(f"\nAnthropic Models: {', '.join(m.value for m in AnthropicModel)}\n")
