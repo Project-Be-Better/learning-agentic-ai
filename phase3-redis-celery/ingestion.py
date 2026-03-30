@@ -1,8 +1,6 @@
-import json
-from models import TelemetryPacket, TripEvent, Priority
-from redis_client import RedisClient
 from keys import RedisSchema
-
+from models import Priority, TelemetryPacket, TripEvent
+from redis_client import RedisClient
 
 # ── PRIORITY MAP ─────────────────────────────────────────
 # maps raw priority string from device → Priority enum
@@ -31,7 +29,7 @@ def ingest_next_event(client: RedisClient, device_id: str) -> TripEvent | None:
         print(f"[Ingestion] buffer empty for {device_id}")
         return None
 
-    print(f"[Ingestion] popped raw event from buffer")
+    print("[Ingestion] popped raw event from buffer")
 
     # ── STEP 2: VALIDATE ─────────────────────────────────
     # Pydantic raises immediately if packet is malformed
@@ -40,7 +38,7 @@ def ingest_next_event(client: RedisClient, device_id: str) -> TripEvent | None:
 
     # ── STEP 3: PERSIST TO POSTGRES ──────────────────────
     # TODO: write raw packet to Postgres events table
-    print(f"[Ingestion] (stub) persisting to Postgres...")
+    print("[Ingestion] (stub) persisting to Postgres...")
 
     # ── STEP 4: TRANSFORM → TripEvent ────────────────────
     priority_str: str = packet.event.priority.lower()
@@ -57,6 +55,8 @@ def ingest_next_event(client: RedisClient, device_id: str) -> TripEvent | None:
         category=packet.event.category,
         priority=priority,
         is_emergency=packet.is_emergency,
+        ping_type=packet.ping_type,
+        source=packet.source,
         location=packet.event.location,
         details=packet.event.details,
         evidence=packet.evidence,
@@ -74,7 +74,7 @@ if __name__ == "__main__":
         event = ingest_next_event(r, "T12345")
 
         if event:
-            print(f"\n>>> TripEvent produced:")
+            print("\n>>> TripEvent produced:")
             print(f"    trip_id    → {event.trip_id}")
             print(f"    event_type → {event.event_type}")
             print(f"    priority   → {event.priority.name}")

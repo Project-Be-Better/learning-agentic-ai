@@ -81,5 +81,6 @@
 
   // ===== NOTEBOOK SUPPORT =====
   "notebook.cellToolbarLocation": "left",
-  "jupyter.askForKernelRestart": false
+  "jupyter.askForKernelRestart": false,
+  "python-envs.defaultEnvManager": "ms-python.python:system"
 }

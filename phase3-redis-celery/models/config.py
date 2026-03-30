@@ -124,7 +124,7 @@ THRESHOLDS: dict[str, dict] = {
 # Scoring Agent applies XGBoost formula using these stats.
 # Raw 600-point arrays are uploaded to S3 — not included here.
 
-SMOOTHNESS_LOG_DETAILS: dict[str, str] = {
+SMOOTHNESS_LOG_DETAILS: dict[str, str | dict[str, str]] = {
     "sample_count": "int   — number of 1Hz samples in window (typically 600)",
     "window_seconds": "int   — duration of sampling window in seconds",
     "speed": {

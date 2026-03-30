@@ -1,9 +1,9 @@
 import json
-import redis
 from typing import Final
-from models import AgentName, CompletionEvent
-from keys import RedisSchema
 
+import redis
+from keys import RedisSchema
+from models import AgentName, CompletionEvent
 
 REDIS_HOST: Final[str] = "localhost"
 REDIS_PORT: Final[int] = 6379
@@ -31,7 +31,7 @@ class RedisClient:
 
     def get_json(self, key: str) -> dict | None:
         """Retrieves a JSON string from Redis and deserialises it."""
-        raw: str | None = self.client.get(key)
+        raw: str | None = self.client.get(key)  # type: ignore
         return json.loads(raw) if raw else None
 
     def exists(self, key: str) -> bool:
@@ -71,26 +71,26 @@ class RedisClient:
 
         Returns None if the buffer is empty.
         """
-        result = self.client.zpopmin(key, count=1)
+        result = self.client.zpopmin(key, count=1)  # type: ignore
         if not result:
             return None
-        raw_json, score = result[0]
+        raw_json, score = result[0]  # type: ignore
         return json.loads(raw_json)
 
     def buffer_length(self, key: str) -> int:
         """Returns how many events are waiting in the buffer."""
         # zcard for Sorted Sets — equivalent of llen for Lists
-        return self.client.zcard(key)
+        return self.client.zcard(key)  # type: ignore
 
     def peek_buffer(self, key: str, count: int = 5) -> list[dict]:
         """
         Peeks at the top N events without removing them.
         Useful for debugging — see what is queued without consuming.
         """
-        results = self.client.zrange(key, 0, count - 1, withscores=True)
+        results = self.client.zrange(key, 0, count - 1, withscores=True)  # type: ignore
         return [
             {"event": json.loads(raw), "priority_score": score}
-            for raw, score in results
+            for raw, score in results  # type: ignore
         ]
 
     # ── TRIP CONTEXT ─────────────────────────────────────

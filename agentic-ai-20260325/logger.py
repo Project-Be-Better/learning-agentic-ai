@@ -12,11 +12,11 @@ Features:
 - Error tracking
 """
 
-import logging
 import json
+import logging
 import time
-from typing import Dict, Any, Optional
 from datetime import datetime, timezone
+from typing import Any, Dict, Optional
 
 
 class StructuredLogger:
@@ -157,7 +157,9 @@ class LogContext:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Log completion with duration."""
-        duration_ms = (time.time() - self.start_time) * 1000
+        duration_ms = (
+            (time.time() - self.start_time) * 1000 if self.start_time is not None else 0
+        )
 
         if exc_type:
             self.logger.error(

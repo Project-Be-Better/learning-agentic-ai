@@ -1,6 +1,7 @@
-import redis
 import json
 from typing import Final
+
+import redis
 
 # Redis Connection Defaults
 # Using Final[str] indicates these values should not be changed during runtime.
@@ -47,7 +48,7 @@ class RedisClient:
         Retrieves the value of a key.
         Returns None if the key does not exist.
         """
-        return self.client.get(key)
+        return self.client.get(key)  # type: ignore
 
     def setex(self, key: str, value: str, ttl: int = DEFAULT_TTL) -> None:
         """
@@ -70,7 +71,7 @@ class RedisClient:
         Returns a list of keys matching a pattern (e.g., 'user:*').
         WARNING: In production, 'keys' can be slow on large datasets. Use 'scan' instead.
         """
-        return self.client.keys(pattern)
+        return self.client.keys(pattern)  # type: ignore
 
     def flushdb(self) -> None:
         """DANGER: Deletes ALL keys in the current database."""
@@ -117,6 +118,6 @@ class RedisClient:
         Returns:
             The dictionary if the key exists, None otherwise.
         """
-        raw: str | None = self.client.get(key)
+        raw: str | None = self.client.get(key)  # type: ignore
         # Only attempt to parse if the key actually exists in Redis.
         return json.loads(raw) if raw else None
