@@ -74,23 +74,69 @@ class OpenAIAdapter(LLMAdapter):
     OpenAI/GPT adapter.
 
     Uses langchain_openai.ChatOpenAI for LangGraph compatibility.
+
+    Model configuration priority (highest to lowest):
+    1. Constructor parameter: OpenAIAdapter(model="gpt-4-turbo")
+    2. Environment variable: OPENAI_MODEL=gpt-4-turbo
+    3. Default: "gpt-4o"
     """
 
-    def __init__(self, model: str = "gpt-4o"):
+    # Default models (can be overridden)
+    DEFAULT_MODEL = "gpt-4o"
+
+    # Available OpenAI models (for validation)
+    AVAILABLE_MODELS = [
+        "gpt-4",
+        "gpt-4-turbo",
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-3.5-turbo",
+    ]
+
+    def __init__(self, model: str = None):
         """
         Initialize OpenAI adapter.
 
+        Model selection (in order of priority):
+        1. Constructor parameter (most specific)
+        2. Environment variable OPENAI_MODEL
+        3. Class default (DEFAULT_MODEL)
+
         Args:
-            model: OpenAI model name (default: gpt-4o)
+            model: OpenAI model name (optional)
+                   If None, uses env var or default
+                   Examples: "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini"
 
         Raises:
             EnvironmentError: If OPENAI_API_KEY not set
+            ValueError: If model is not in AVAILABLE_MODELS
+
+        Examples:
+            # Use default (gpt-4o)
+            adapter = OpenAIAdapter()
+
+            # Override with env var
+            adapter = OpenAIAdapter()  # Uses OPENAI_MODEL env var if set
+
+            # Override with parameter (highest priority)
+            adapter = OpenAIAdapter(model="gpt-4-turbo")
         """
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise EnvironmentError(
                 "OPENAI_API_KEY not found in environment. "
                 "Set it in .env.local or as environment variable."
+            )
+
+        # Determine model (priority: param > env > default)
+        if model is None:
+            model = os.getenv("OPENAI_MODEL", self.DEFAULT_MODEL)
+
+        # Validate model
+        if model not in self.AVAILABLE_MODELS:
+            raise ValueError(
+                f"Invalid OpenAI model: {model}. "
+                f"Available models: {', '.join(self.AVAILABLE_MODELS)}"
             )
 
         self.model = model
@@ -122,23 +168,71 @@ class AnthropicAdapter(LLMAdapter):
     Anthropic/Claude adapter.
 
     Uses langchain_anthropic.ChatAnthropic for LangGraph compatibility.
+
+    Model configuration priority (highest to lowest):
+    1. Constructor parameter: AnthropicAdapter(model="claude-opus-20250514")
+    2. Environment variable: ANTHROPIC_MODEL=claude-opus-20250514
+    3. Default: "claude-3-5-sonnet-20241022"
     """
 
-    def __init__(self, model: str = "claude-3-5-sonnet-20241022"):
+    # Default models (can be overridden)
+    DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
+
+    # Available Anthropic models (for validation)
+    AVAILABLE_MODELS = [
+        "claude-opus-20250514",  # Latest Opus
+        "claude-sonnet-4-20250514",  # Latest Sonnet 4
+        "claude-3-5-sonnet-20241022",  # Sonnet 3.5
+        "claude-3-5-haiku-20241022",  # Haiku 3.5
+        "claude-3-opus-20240229",  # Opus 3
+        "claude-3-sonnet-20240229",  # Sonnet 3
+        "claude-3-haiku-20240307",  # Haiku 3
+    ]
+
+    def __init__(self, model: str = None):
         """
         Initialize Anthropic adapter.
 
+        Model selection (in order of priority):
+        1. Constructor parameter (most specific)
+        2. Environment variable ANTHROPIC_MODEL
+        3. Class default (DEFAULT_MODEL)
+
         Args:
-            model: Anthropic model name (default: claude-3-5-sonnet-20241022)
+            model: Anthropic model name (optional)
+                   If None, uses env var or default
+                   Examples: "claude-opus-20250514", "claude-3-5-sonnet-20241022"
 
         Raises:
             EnvironmentError: If ANTHROPIC_API_KEY not set
+            ValueError: If model is not in AVAILABLE_MODELS
+
+        Examples:
+            # Use default (claude-3-5-sonnet-20241022)
+            adapter = AnthropicAdapter()
+
+            # Override with env var
+            adapter = AnthropicAdapter()  # Uses ANTHROPIC_MODEL env var if set
+
+            # Override with parameter (highest priority)
+            adapter = AnthropicAdapter(model="claude-opus-20250514")
         """
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise EnvironmentError(
                 "ANTHROPIC_API_KEY not found in environment. "
                 "Set it in .env.local or as environment variable."
+            )
+
+        # Determine model (priority: param > env > default)
+        if model is None:
+            model = os.getenv("ANTHROPIC_MODEL", self.DEFAULT_MODEL)
+
+        # Validate model
+        if model not in self.AVAILABLE_MODELS:
+            raise ValueError(
+                f"Invalid Anthropic model: {model}. "
+                f"Available models: {', '.join(self.AVAILABLE_MODELS)}"
             )
 
         self.model = model
@@ -185,9 +279,14 @@ class LLMConfig(BaseModel):
 # =============================================================================
 
 
-def load_llm() -> LLMConfig:
+def load_llm(provider: str = None, model: str = None) -> LLMConfig:
     """
-    Load LLM adapter based on environment configuration.
+    Load LLM adapter based on configuration.
+
+    Configuration priority (highest to lowest):
+    1. Function parameters: load_llm(provider="anthropic", model="claude-opus-...")
+    2. Environment variables: LLM_PROVIDER, OPENAI_MODEL, ANTHROPIC_MODEL
+    3. Defaults: provider="openai", model per adapter's DEFAULT_MODEL
 
     Environment variables:
         LLM_PROVIDER: "openai" or "anthropic" (default: "openai")
@@ -196,6 +295,13 @@ def load_llm() -> LLMConfig:
         OPENAI_MODEL: OpenAI model (default: gpt-4o)
         ANTHROPIC_MODEL: Anthropic model (default: claude-3-5-sonnet-20241022)
 
+    Args:
+        provider: "openai" or "anthropic" (optional)
+                  If None, uses LLM_PROVIDER env var or defaults to "openai"
+        model: Specific model to use (optional)
+               If None, uses provider's OPENAI_MODEL/ANTHROPIC_MODEL env var
+               or adapter's DEFAULT_MODEL
+
     Returns:
         LLMConfig: Initialized configuration with adapter and model info
 
@@ -203,30 +309,39 @@ def load_llm() -> LLMConfig:
         ValueError: If provider is unsupported
         EnvironmentError: If required API key is missing
 
-    Example:
+    Examples:
+        # Use defaults
         config = load_llm()
-        llm = config.adapter.get_chat_model()
 
-        agent = create_react_agent(
-            model=llm,
-            tools=[...],
-            system_prompt="..."
-        )
+        # Use environment variables
+        config = load_llm()  # LLM_PROVIDER=anthropic, ANTHROPIC_MODEL=claude-opus-...
+
+        # Override provider only (uses that provider's default model)
+        config = load_llm(provider="anthropic")
+
+        # Override provider and model explicitly
+        config = load_llm(provider="openai", model="gpt-4-turbo")
+
+        # For tests/scripts
+        config = load_llm(provider="anthropic", model="claude-opus-20250514")
+        llm = config.adapter.get_chat_model()
     """
     from dotenv import load_dotenv
 
     # Load from .env.local if it exists
     load_dotenv()
 
-    # Get provider from environment
-    provider = os.getenv("LLM_PROVIDER", "openai").lower().strip()
+    # Determine provider (priority: param > env > default)
+    if provider is None:
+        provider = os.getenv("LLM_PROVIDER", "openai").lower().strip()
+    else:
+        provider = provider.lower().strip()
 
+    # Create adapter based on provider
     if provider == "openai":
-        model = os.getenv("OPENAI_MODEL", "gpt-4o")
         adapter = OpenAIAdapter(model=model)
 
     elif provider == "anthropic":
-        model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
         adapter = AnthropicAdapter(model=model)
 
     else:
@@ -248,28 +363,59 @@ def load_llm() -> LLMConfig:
 if __name__ == "__main__":
     # Example: Load LLM and create a simple agent
     print("\n" + "=" * 70)
-    print("LLM Adapter Pattern: Usage Example")
+    print("LLM Adapter Pattern: Model Configuration Options")
     print("=" * 70 + "\n")
 
+    # EXAMPLE 1: Use defaults
+    print("[Example 1] Use Defaults")
+    print("-" * 70)
     try:
         config = load_llm()
-        print("✓ Loaded LLM Config:")
-        print(f"  Provider: {config.provider}")
-        print(f"  Model: {config.model}")
-        print(f"  Adapter: {config.adapter}\n")
+        print(f"✓ Loaded: {config.provider} ({config.model})\n")
+    except Exception as e:
+        print(f"Note: {e}\n")
 
-        # Get the chat model
-        llm = config.adapter.get_chat_model()
-        print(f"✓ Chat Model Ready: {llm}\n")
+    # EXAMPLE 2: Override via environment (simulated)
+    print("[Example 2] Environment Variable Override")
+    print("-" * 70)
+    print("# In .env.local:")
+    print("LLM_PROVIDER=anthropic")
+    print("ANTHROPIC_MODEL=claude-opus-20250514")
+    print("# Then: config = load_llm()")
+    print("# Result: Uses Claude Opus instead of Sonnet\n")
 
-        # This is what you'd pass to create_react_agent
-        print(f"✓ Ready for: create_react_agent(model={llm}, tools=[...], ...)\n")
+    # EXAMPLE 3: Override via constructor parameter
+    print("[Example 3] Constructor Parameter Override")
+    print("-" * 70)
+    try:
+        adapter = AnthropicAdapter(model="claude-opus-20250514")
+        print(f"✓ Created adapter with: {adapter.model}\n")
+    except Exception as e:
+        print(f"Note: {e}\n")
 
-    except EnvironmentError as e:
-        print(f"✗ Environment Error: {e}\n")
-        print("Setup .env.local with:")
-        print("  LLM_PROVIDER=anthropic")
-        print("  ANTHROPIC_API_KEY=sk-ant-...\n")
+    # EXAMPLE 4: Override via factory function
+    print("[Example 4] Factory Function with Parameters")
+    print("-" * 70)
+    try:
+        config = load_llm(provider="openai", model="gpt-4-turbo")
+        print(f"✓ Loaded: {config.provider} ({config.model})\n")
+    except Exception as e:
+        print(f"Note: {e}\n")
 
-    except ValueError as e:
-        print(f"✗ Configuration Error: {e}\n")
+    # EXAMPLE 5: For tests/scripts
+    print("[Example 5] For Tests/Scripts (Explicit Control)")
+    print("-" * 70)
+    print("""
+    # In unit test:
+    config = load_llm(provider="anthropic", model="claude-3-5-haiku-20241022")
+    llm = config.adapter.get_chat_model()
+    
+    agent = ScoringAgent(llm=llm)
+    result = agent.invoke(test_input)
+    """)
+
+    # EXAMPLE 6: Show available models
+    print("\n[Example 6] Available Models")
+    print("-" * 70)
+    print(f"OpenAI Models: {', '.join(OpenAIAdapter.AVAILABLE_MODELS)}")
+    print(f"\nAnthropic Models: {', '.join(AnthropicAdapter.AVAILABLE_MODELS)}\n")
