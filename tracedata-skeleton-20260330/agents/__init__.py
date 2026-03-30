@@ -1,7 +1,5 @@
-"""Backward-compatible exports for the refactored agents package."""
-
-from agents import (
-    Agent,
+from agents.base import Agent
+from agents.examples import (
     ExampleOrchestratorAgent,
     ExampleScoringAgent,
     ExampleWeatherTrafficAgent,
