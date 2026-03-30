@@ -1,32 +1,30 @@
-import os
-from typing import Optional
-
 from adapters.anthropic_adapter import AnthropicAdapter
-from adapters.models import LLMConfig
+from adapters.models import AnthropicModel, LLMConfig, OpenAIModel
 from adapters.openai_adapter import OpenAIAdapter
 
 
-def load_llm(provider: Optional[str] = None, model: Optional[str] = None) -> LLMConfig:
-    """Factory that resolves provider/model and returns a configured adapter."""
+def _infer_provider_from_model(model: OpenAIModel | AnthropicModel) -> str:
+    if isinstance(model, OpenAIModel):
+        return "openai"
+    return "anthropic"
+
+
+def load_llm(model: OpenAIModel | AnthropicModel) -> LLMConfig:
+    """Factory that accepts a model enum and returns a configured adapter.
+
+    - load_llm(OpenAIModel.GPT_4O)
+    - load_llm(AnthropicModel.CLAUDE_35_SONNET_20241022)
+    """
     from dotenv import load_dotenv
 
     load_dotenv()
 
-    resolved_provider = (
-        os.getenv("LLM_PROVIDER", "openai").lower().strip()
-        if provider is None
-        else provider.lower().strip()
-    )
+    resolved_provider = _infer_provider_from_model(model)
 
     if resolved_provider == "openai":
         adapter = OpenAIAdapter(model=model)
-    elif resolved_provider == "anthropic":
-        adapter = AnthropicAdapter(model=model)
     else:
-        raise ValueError(
-            f"Unsupported LLM_PROVIDER: {resolved_provider}. "
-            "Must be one of: openai, anthropic"
-        )
+        adapter = AnthropicAdapter(model=model)
 
     return LLMConfig(
         provider=resolved_provider,
