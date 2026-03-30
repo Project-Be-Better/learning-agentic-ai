@@ -1,6 +1,6 @@
 from enum import StrEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from adapters.base import LLMAdapter
 
@@ -25,6 +25,8 @@ class AnthropicModel(StrEnum):
 
 class LLMConfig(BaseModel):
     """Resolved LLM configuration returned by the factory."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     provider: str
     model: str

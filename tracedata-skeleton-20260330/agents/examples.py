@@ -1,3 +1,5 @@
+from tools.conditions import get_traffic, get_weather
+
 from agents.base import Agent
 
 
@@ -23,7 +25,7 @@ class ExampleWeatherTrafficAgent(Agent):
         super().__init__(
             llm=llm,
             agent_name="WeatherTrafficAgent",
-            tools=[],
+            tools=[get_weather, get_traffic],
             system_prompt=system_prompt,
         )
 

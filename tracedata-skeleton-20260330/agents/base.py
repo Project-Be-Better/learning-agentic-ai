@@ -1,7 +1,7 @@
 from abc import ABC
 from typing import Any
 
-from langgraph.precompiled import create_react_agent
+from langgraph.prebuilt import create_react_agent
 
 
 class Agent(ABC):
@@ -24,7 +24,7 @@ class Agent(ABC):
         return create_react_agent(
             model=self.llm,
             tools=self.tools,
-            system_prompt=self.system_prompt,
+            prompt=self.system_prompt,
         )
 
     def invoke(self, input_data: dict) -> dict:
