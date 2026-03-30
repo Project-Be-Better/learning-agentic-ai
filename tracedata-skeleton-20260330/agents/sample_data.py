@@ -1,225 +1,569 @@
 """
-ScoringAgent Sample Data — Demo Data Contracts
+TraceData Sample Data — Complete Event & Agent Workflow Reference
 
-This file contains all sample/demo data used by the ScoringAgent.
-It serves two purposes:
-
-1. DOCUMENTATION: Shows teammates what data structures look like
-2. TESTING: Provides hardcoded data for demo/unit tests
+This file contains sample data for ALL event types described in the Input Data Architecture,
+plus outputs from each agent component.
 
 ORGANIZATION:
-  INPUT (Data ScoringAgent Consumes):
-    - DEMO_TRIP_CONTEXT — From Orchestrator/DB
-    - DEMO_SMOOTHNESS_LOGS — From Redis (populated by Ingestion Tool)
-    - DEMO_HARSH_EVENTS — From Redis (populated by Ingestion Tool)
+  1. INGESTION LAYER — TripEvent payloads (after Ingestion Tool processing)
+     Organized by priority & event type from EVENT_MATRIX
 
-  EXTRACTED (Intermediate - from extract_scoring_features tool):
-    - (Implicit - see tools.py)
+  2. SCORING AGENT — Outputs (trip scores, explanations, fairness audits)
 
-  OUTPUT (Data ScoringAgent Produces):
-    - DEMO_SHAP_EXPLANATION — Stored in scoring.shap_explanations
-    - DEMO_FAIRNESS_AUDIT — Stored in scoring.fairness_audit
-    - DEMO_TRIP_SCORE — Stored in scoring.trip_scores
+  3. SAFETY AGENT — Outputs (safety flags, enriched events) [Future]
 
-Use these to understand cross-agent contracts.
+  4. SENTIMENT AGENT — Outputs (wellbeing assessment) [Future]
+
+  5. ORCHESTRATOR — Trip context and routing decisions
+
+COVERAGE:
+  ✅ 15 event types from EVENT_MATRIX (all scenarios)
+  ✅ Priority levels: CRITICAL, HIGH, MEDIUM, LOW
+  ✅ Sources: telematics_device, driver_app
+  ✅ Agent-specific outputs and transformations
+
+For detailed field definitions, see Input Data Architecture doc (A3).
 """
 
 # ==============================================================================
-# INPUT DATA — What ScoringAgent Consumes
+# LAYER 1: INGESTION — TripEvent Payloads (After Ingestion Tool Processing)
 # ==============================================================================
 
-DEMO_TRIP_CONTEXT = {
-    """
-    Source: From Orchestrator (reads from Postgres public.trips or Redis)
-    Consumed by: get_trip_context() tool
-    
-    Contains:
-      - Trip identification (trip_id, driver_id, truck_id)
-      - Trip metadata (duration, distance)
-      - Demographics (driver_age, experience_level) — for fairness audit ONLY
-      - Baseline context (historical_avg_score, peer_group_avg)
-    """
+# CRITICAL PRIORITY (score=0)
+
+DEMO_EVENT_COLLISION = {
+    "event_id": "EV-EMERGENCY-T12345-001",
+    "device_event_id": "DEV-COL-001",
     "trip_id": "TRIP-T12345-2026-03-07-08:00",
     "driver_id": "DRV-ANON-7829",
     "truck_id": "T12345",
-    # Demographics — used for fairness audit, NOT for scoring
-    "driver_age": 28,
-    "experience_level": "medium",
-    # Context for comparison
-    "historical_avg_score": 71.2,  # 3-trip rolling average
-    "peer_group_avg": 68.4,  # Same route/shift cohort average
-    # Trip metadata — needed for feature extraction
-    "duration_minutes": 62,
-    "distance_km": 40.3,
-    # Logging
-    "window_count": 6,
+    "batch_id": "EMERGENCY-T12345-2026-03-07-08-44-23",
+    "event_type": "collision",
+    "category": "critical",
+    "priority": 0,
+    "timestamp": "2026-03-07T08:44:23Z",
+    "offset_seconds": 2963,
+    "trip_meter_km": 34.2,
+    "odometer_km": 180234.2,
+    "location": {"lat": 1.2863, "lon": 104.0115},
+    "ping_type": "emergency",
+    "source": "telematics_device",
+    "is_emergency": True,
+    "schema_version": "event_v1",
+    "details": {
+        "g_force_magnitude": 2.3,
+        "confidence": 0.99,
+        "airbag_triggered": True,
+        "impact_direction": "front_left",
+        "speed_kmh": 48,
+        "injury_severity_estimate": "moderate",
+    },
+    "evidence": {
+        "video_url": "s3://tracedata-clips/EMERGENCY-T12345-2026-03-07.mp4",
+        "video_duration_seconds": 30,
+        "capture_offset_seconds": -15,
+        "voice_url": "s3://tracedata-voice/EMERGENCY-T12345-2026-03-07.wav",
+        "voice_duration_seconds": 30,
+        "sensor_dump_url": "s3://tracedata-sensors/EMERGENCY-T12345-2026-03-07.bin",
+        "sensor_dump_size_bytes": 5242880,
+    },
 }
 
-"""
-    Source: From Redis trip:{id}:smoothness_logs
-    Populated by: Ingestion Tool (from device smoothness_log events)
-    Consumed by: get_smoothness_logs() tool
-    
-    Structure: Array of 6-16 10-minute windows
-    Each window contains:
-      - Spatio-temporal anchor (window_index, trip_meter_km)
-      - Acceleration stats (jerk_mean, jerk_max, jerk_std_dev)
-      - Speed stats (speed_mean_kmh, speed_std_dev)
-      - Lateral stats (mean_lateral_g, max_lateral_g)
-      - Engine stats (mean_rpm, idle_seconds)
-    
-    Used by: extract_scoring_features() to aggregate into scoring features
-    """
-DEMO_SMOOTHNESS_LOGS = [
-    {
-        "window_index": 0,
-        "trip_meter_km": 5.2,
-        "jerk_mean": 0.018,
-        "jerk_max": 0.072,
-        "jerk_std_dev": 0.014,
-        "speed_mean_kmh": 38.4,
-        "speed_std_dev": 14.2,
-        "mean_lateral_g": 0.04,
-        "max_lateral_g": 0.22,
-        "mean_rpm": 1640,
-        "idle_seconds": 85,
+DEMO_EVENT_ROLLOVER = {
+    "event_id": "EV-ROLLOVER-T12345-001",
+    "device_event_id": "DEV-ROL-001",
+    "trip_id": "TRIP-T12345-2026-03-08-14:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "EMERGENCY-T12345-2026-03-08-14-22-10",
+    "event_type": "rollover",
+    "category": "critical",
+    "priority": 0,
+    "timestamp": "2026-03-08T14:22:10Z",
+    "offset_seconds": 1330,
+    "trip_meter_km": 18.7,
+    "odometer_km": 180419.7,
+    "location": {"lat": 1.3412, "lon": 103.9021},
+    "ping_type": "emergency",
+    "source": "telematics_device",
+    "is_emergency": True,
+    "schema_version": "event_v1",
+    "details": {
+        "g_force_magnitude": 3.1,
+        "impact_direction": "right_side",
+        "roll_angle_degrees": 67,
+        "confidence": 0.97,
     },
-    {
-        "window_index": 1,
-        "trip_meter_km": 13.8,
-        "jerk_mean": 0.007,
-        "jerk_max": 0.031,
-        "jerk_std_dev": 0.005,
-        "speed_mean_kmh": 82.1,
-        "speed_std_dev": 6.8,
-        "mean_lateral_g": 0.02,
-        "max_lateral_g": 0.11,
-        "mean_rpm": 1880,
-        "idle_seconds": 0,
+    "evidence": {
+        "video_url": "s3://tracedata-clips/ROLLOVER-T12345-2026-03-08.mp4",
+        "video_duration_seconds": 30,
+        "capture_offset_seconds": -15,
+        "voice_url": "s3://tracedata-voice/ROLLOVER-T12345-2026-03-08.wav",
+        "voice_duration_seconds": 30,
+        "sensor_dump_url": "s3://tracedata-sensors/ROLLOVER-T12345-2026-03-08.bin",
+        "sensor_dump_size_bytes": 5242880,
     },
-    {
-        "window_index": 2,
-        "trip_meter_km": 22.1,
-        "jerk_mean": 0.009,
-        "jerk_max": 0.038,
-        "jerk_std_dev": 0.007,
-        "speed_mean_kmh": 79.3,
-        "speed_std_dev": 9.1,
-        "mean_lateral_g": 0.02,
-        "max_lateral_g": 0.14,
-        "mean_rpm": 1820,
-        "idle_seconds": 0,
-    },
-    {
-        "window_index": 3,
-        "trip_meter_km": 29.4,
-        "jerk_mean": 0.024,
-        "jerk_max": 0.089,
-        "jerk_std_dev": 0.019,
-        "speed_mean_kmh": 54.2,
-        "speed_std_dev": 18.6,
-        "mean_lateral_g": 0.03,
-        "max_lateral_g": 0.19,
-        "mean_rpm": 1720,
-        "idle_seconds": 42,
-    },
-    {
-        "window_index": 4,
-        "trip_meter_km": 35.8,
-        "jerk_mean": 0.016,
-        "jerk_max": 0.061,
-        "jerk_std_dev": 0.012,
-        "speed_mean_kmh": 41.2,
-        "speed_std_dev": 12.4,
-        "mean_lateral_g": 0.03,
-        "max_lateral_g": 0.21,
-        "mean_rpm": 1580,
-        "idle_seconds": 58,
-    },
-    {
-        "window_index": 5,
-        "trip_meter_km": 40.3,
-        "jerk_mean": 0.012,
-        "jerk_max": 0.048,
-        "jerk_std_dev": 0.009,
-        "speed_mean_kmh": 28.1,
-        "speed_std_dev": 11.8,
-        "mean_lateral_g": 0.02,
-        "max_lateral_g": 0.16,
-        "mean_rpm": 1420,
-        "idle_seconds": 94,
-    },
-]
+}
 
-"""
-Source: From Redis trip:{id}:harsh_events
-Populated by: Ingestion Tool (from device harsh_brake/accel/corner events)
-Consumed by: get_harsh_events() tool
+DEMO_EVENT_DRIVER_SOS = {
+    "event_id": "EV-SOS-D6789-012",
+    "device_event_id": "APP-SOS-012",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "SOS-D6789-2026-03-07-09-00-00",
+    "event_type": "driver_sos",
+    "category": "critical",
+    "priority": 0,
+    "timestamp": "2026-03-07T09:00:00Z",
+    "offset_seconds": 3600,
+    "trip_meter_km": None,
+    "odometer_km": None,
+    "location": {"lat": 1.2900, "lon": 104.0200},
+    "ping_type": "emergency",
+    "source": "driver_app",
+    "is_emergency": True,
+    "schema_version": "event_v1",
+    "details": {
+        "message": "Vehicle has broken down. Need roadside assistance.",
+        "sos_type": "breakdown",
+    },
+    "evidence": None,
+}
 
-Structure: Array of harsh events (0 to many per trip)
-Each event contains:
-    - Identification (event_id, event_type)
-    - Spatio-temporal location (trip_meter_km)
-    - Severity (peak_force_g, speed_at_event_kmh)
+# HIGH PRIORITY (score=3)
 
-Used by: extract_scoring_features() to count and calculate per-100km rate
+DEMO_EVENT_HARSH_BRAKE = {
+    "event_id": "EV-HB-T12345-002",
+    "device_event_id": "DEV-HB-002",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "HIGH-T12345-2026-03-07-09-10-00",
+    "event_type": "harsh_brake",
+    "category": "harsh_events",
+    "priority": 3,
+    "timestamp": "2026-03-07T09:10:00Z",
+    "offset_seconds": 4200,
+    "trip_meter_km": 48.7,
+    "odometer_km": 180248.7,
+    "location": {"lat": 1.3000, "lon": 103.8500},
+    "ping_type": "high_speed",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "g_force_x": -0.92,
+        "speed_kmh": 88,
+        "duration_seconds": 2,
+        "confidence": 0.95,
+    },
+    "evidence": {
+        "video_url": "s3://tracedata-clips/HIGH-T12345-2026-03-07-09-10-00.mp4",
+        "video_duration_seconds": 30,
+        "capture_offset_seconds": -15,
+        "video_codec": "h264",
+        "video_resolution": "1280x720",
+    },
+}
 
-IMPORTANT: Harsh events are for coaching context ONLY.
-            They NEVER reduce the behaviour_score.
-"""
-DEMO_HARSH_EVENTS = [
-    {
-        "event_id": "EV-001",
-        "event_type": "harsh_brake",
-        "trip_meter_km": 4.1,
-        "peak_force_g": -0.52,
-        "speed_at_event_kmh": 42.0,
+DEMO_EVENT_HARD_ACCEL = {
+    "event_id": "EV-HA-T12345-003",
+    "device_event_id": "DEV-HA-003",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "HIGH-T12345-2026-03-07-09-35-00",
+    "event_type": "hard_accel",
+    "category": "harsh_events",
+    "priority": 3,
+    "timestamp": "2026-03-07T09:35:00Z",
+    "offset_seconds": 5700,
+    "trip_meter_km": 56.1,
+    "odometer_km": 180256.1,
+    "location": {"lat": 1.3100, "lon": 103.8600},
+    "ping_type": "high_speed",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "g_force_x": 0.82,
+        "speed_kmh": 42,
+        "duration_seconds": 3,
+        "confidence": 0.91,
     },
-    {
-        "event_id": "EV-002",
-        "event_type": "harsh_brake",
-        "trip_meter_km": 28.7,
-        "peak_force_g": -0.71,
-        "speed_at_event_kmh": 67.2,
+    "evidence": {
+        "video_url": "s3://tracedata-clips/HIGH-T12345-2026-03-07-09-35-00.mp4",
+        "video_duration_seconds": 30,
+        "capture_offset_seconds": -15,
+        "video_codec": "h264",
+        "video_resolution": "1280x720",
     },
-    {
-        "event_id": "EV-003",
-        "event_type": "harsh_brake",
-        "trip_meter_km": 29.1,
-        "peak_force_g": -0.64,
-        "speed_at_event_kmh": 61.8,
+}
+
+DEMO_EVENT_HARSH_CORNER = {
+    "event_id": "EV-HC-T12345-004",
+    "device_event_id": "DEV-HC-004",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "HIGH-T12345-2026-03-07-10-05-00",
+    "event_type": "harsh_corner",
+    "category": "harsh_events",
+    "priority": 3,
+    "timestamp": "2026-03-07T10:05:00Z",
+    "offset_seconds": 7500,
+    "trip_meter_km": 63.4,
+    "odometer_km": 180263.4,
+    "location": {"lat": 1.3180, "lon": 103.8680},
+    "ping_type": "high_speed",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "g_force_y": 0.87,
+        "speed_kmh": 65,
+        "duration_seconds": 2,
+        "confidence": 0.88,
+        "direction": "left",
     },
-    {
-        "event_id": "EV-004",
-        "event_type": "harsh_brake",
-        "trip_meter_km": 33.2,
-        "peak_force_g": -0.48,
-        "speed_at_event_kmh": 38.5,
+    "evidence": {
+        "video_url": "s3://tracedata-clips/HIGH-T12345-2026-03-07-10-05-00.mp4",
+        "video_duration_seconds": 30,
+        "capture_offset_seconds": -15,
+        "video_codec": "h264",
+        "video_resolution": "1280x720",
     },
-]
+}
+
+DEMO_EVENT_VEHICLE_OFFLINE = {
+    "event_id": "EV-OFFLINE-T12345-005",
+    "device_event_id": "DEV-OFFLINE-005",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "HIGH-T12345-2026-03-07-10-15-00",
+    "event_type": "vehicle_offline",
+    "category": "critical",
+    "priority": 3,
+    "timestamp": "2026-03-07T10:15:00Z",
+    "offset_seconds": 8100,
+    "trip_meter_km": 66.2,
+    "odometer_km": 180266.2,
+    "location": {"lat": 1.3220, "lon": 103.8720},
+    "ping_type": "high_speed",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "offline_duration_seconds": 142,
+        "last_known_speed_kmh": 72,
+        "reconnect_timestamp": "2026-03-07T10:17:22Z",
+    },
+    "evidence": None,
+}
+
+DEMO_EVENT_DRIVER_DISPUTE = {
+    "event_id": "EV-DISPUTE-D6789-013",
+    "device_event_id": "APP-DISPUTE-013",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "DISPUTE-D6789-2026-03-07-09-30-00",
+    "event_type": "driver_dispute",
+    "category": "driver_feedback",
+    "priority": 3,
+    "timestamp": "2026-03-07T09:30:00Z",
+    "offset_seconds": None,
+    "trip_meter_km": None,
+    "odometer_km": None,
+    "location": None,
+    "ping_type": "high_speed",
+    "source": "driver_app",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "disputed_event_id": "DEV-HB-002",
+        "disputed_event_type": "harsh_brake",
+        "reason": "A car cut in front of me suddenly. I had to brake hard to avoid a collision.",
+        "supporting_note": "Check dashcam footage at 09:10 on AYE",
+    },
+    "evidence": None,
+}
+
+# MEDIUM PRIORITY (score=6)
+
+DEMO_EVENT_SPEEDING = {
+    "event_id": "EV-SPD-T12345-006",
+    "device_event_id": "DEV-SPD-006",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "MEDIUM-T12345-2026-03-07-10-00-00",
+    "event_type": "speeding",
+    "category": "speed_compliance",
+    "priority": 6,
+    "timestamp": "2026-03-07T10:00:00Z",
+    "offset_seconds": 7200,
+    "trip_meter_km": 62.4,
+    "odometer_km": 180262.4,
+    "location": {"lat": 1.3200, "lon": 103.8700},
+    "ping_type": "medium_speed",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "speed_kmh": 112,
+        "speed_limit_kmh": 90,
+        "duration_seconds": 45,
+        "confidence": 0.97,
+    },
+    "evidence": None,
+}
+
+DEMO_EVENT_DRIVER_FEEDBACK = {
+    "event_id": "EV-FB-D6789-014",
+    "device_event_id": "APP-FB-014",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "FEEDBACK-D6789-2026-03-07-11-00-00",
+    "event_type": "driver_feedback",
+    "category": "driver_feedback",
+    "priority": 6,
+    "timestamp": "2026-03-07T11:00:00Z",
+    "offset_seconds": None,
+    "trip_meter_km": None,
+    "odometer_km": None,
+    "location": None,
+    "ping_type": "medium_speed",
+    "source": "driver_app",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "trip_rating": 4,
+        "message": "Long trip today but manageable. Traffic on AYE was bad around 9am.",
+        "fatigue_self_report": "mild",
+    },
+    "evidence": None,
+}
+
+# LOW PRIORITY (score=9)
+
+DEMO_EVENT_EXCESSIVE_IDLE = {
+    "event_id": "EV-IDLE-T12345-007",
+    "device_event_id": "DEV-IDLE-007",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "BATCH-T12345-2026-03-07-10-10-00",
+    "event_type": "excessive_idle",
+    "category": "idle_fuel",
+    "priority": 9,
+    "timestamp": "2026-03-07T10:08:00Z",
+    "offset_seconds": 7680,
+    "trip_meter_km": 64.0,
+    "odometer_km": 180264.0,
+    "location": {"lat": 1.3210, "lon": 103.8710},
+    "ping_type": "batch",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "idle_duration_seconds": 342,
+        "fuel_wasted_estimate_litres": 0.046,
+        "engine_rpm_during_idle": 820,
+    },
+    "evidence": None,
+}
+
+DEMO_EVENT_SMOOTHNESS_LOG = {
+    "event_id": "EV-SMOOTH-T12345-008",
+    "device_event_id": "DEV-SMOOTH-008",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "BATCH-T12345-2026-03-07-10-10-00",
+    "event_type": "smoothness_log",
+    "category": "normal_operation",
+    "priority": 9,
+    "timestamp": "2026-03-07T10:10:00Z",
+    "offset_seconds": 7800,
+    "trip_meter_km": 68.1,
+    "odometer_km": 180268.1,
+    "location": {"lat": 1.3250, "lon": 103.8750},
+    "ping_type": "batch",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "sample_count": 600,
+        "window_seconds": 600,
+        "speed": {
+            "mean_kmh": 72.3,
+            "std_dev": 8.1,
+            "max_kmh": 94.0,
+            "variance": 65.6,
+        },
+        "longitudinal": {
+            "mean_accel_g": 0.04,
+            "std_dev": 0.12,
+            "max_decel_g": -0.31,
+            "harsh_brake_count": 0,
+            "harsh_accel_count": 0,
+        },
+        "lateral": {
+            "mean_lateral_g": 0.02,
+            "max_lateral_g": 0.18,
+            "harsh_corner_count": 0,
+        },
+        "jerk": {
+            "mean": 0.008,
+            "max": 0.041,
+            "std_dev": 0.006,
+        },
+        "engine": {
+            "mean_rpm": 1820,
+            "max_rpm": 2340,
+            "idle_seconds": 45,
+            "idle_events": 1,
+            "longest_idle_seconds": 38,
+            "over_rev_count": 0,
+            "over_rev_seconds": 0,
+        },
+        "incident_event_ids": ["DEV-HB-002", "DEV-SPD-006"],
+        "raw_log_url": "s3://tracedata-sensors/T12345-batch-20260307-1010.bin",
+    },
+    "evidence": None,
+}
+
+DEMO_EVENT_NORMAL_OPERATION = {
+    "event_id": "EV-SAFE-T12345-009",
+    "device_event_id": "DEV-SAFE-009",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "BATCH-T12345-2026-03-07-10-10-00",
+    "event_type": "normal_operation",
+    "category": "normal_operation",
+    "priority": 9,
+    "timestamp": "2026-03-07T10:04:00Z",
+    "offset_seconds": 7440,
+    "trip_meter_km": 65.3,
+    "odometer_km": 180265.3,
+    "location": {"lat": 1.3230, "lon": 103.8730},
+    "ping_type": "batch",
+    "source": "telematics_device",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "checkpoint_number": 18,
+        "distance_km": 0.7,
+        "violations_in_period": 0,
+    },
+    "evidence": None,
+}
+
+DEMO_EVENT_START_OF_TRIP = {
+    "event_id": "EV-SOT-T12345-010",
+    "device_event_id": "APP-SOT-010",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "SOT-T12345-2026-03-07-08-00-00",
+    "event_type": "start_of_trip",
+    "category": "trip_lifecycle",
+    "priority": 9,
+    "timestamp": "2026-03-07T08:00:00Z",
+    "offset_seconds": 0,
+    "trip_meter_km": 0.0,
+    "odometer_km": 180200.0,
+    "location": {"lat": 1.3456, "lon": 103.8301},
+    "ping_type": "start_of_trip",
+    "source": "driver_app",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "odometer_km": 180200.0,
+        "fuel_level_litres": 45,
+        "vehicle_status": "ready",
+        "driver_confirmation": True,
+        "intended_destination": "Port of Singapore",
+        "estimated_distance_km": 78,
+    },
+    "evidence": None,
+}
+
+DEMO_EVENT_END_OF_TRIP = {
+    "event_id": "EV-EOT-T12345-011",
+    "device_event_id": "APP-EOT-011",
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "batch_id": "EOT-T12345-2026-03-07-10-45-32",
+    "event_type": "end_of_trip",
+    "category": "trip_lifecycle",
+    "priority": 9,
+    "timestamp": "2026-03-07T10:45:32Z",
+    "offset_seconds": 9932,
+    "trip_meter_km": 78.3,
+    "odometer_km": 180278.3,
+    "location": {"lat": 1.2900, "lon": 103.8500},
+    "ping_type": "end_of_trip",
+    "source": "driver_app",
+    "is_emergency": False,
+    "schema_version": "event_v1",
+    "details": {
+        "duration_minutes": 165,
+        "distance_km": 78.3,
+        "harsh_events_total": 8,
+        "speeding_events": 2,
+        "safe_operation_checkpoints": 28,
+        "total_checkpoints": 38,
+        "safety_percentage": 73.7,
+        "fuel_consumed_litres": 9.8,
+        "avg_speed_kmh": 28.5,
+        "max_speed_kmh": 112,
+    },
+    "evidence": None,
+}
 
 # ==============================================================================
-# OUTPUT DATA — What ScoringAgent Produces
+# LAYER 2: ORCHESTRATOR — Trip Context
 # ==============================================================================
 
-DEMO_SHAP_EXPLANATION = {
-    """
-    Destination: Postgres scoring.shap_explanations table
-    Produced by: score_and_audit_trip() tool (from XAI engine)
-    
-    Contains:
-      - Top contributing features and their SHAP values
-      - Base score (expected value for average driver)
-      - Final score from XGBoost
-      - Human-readable narrative
-    
-    Used by: Frontend (explain endpoint), HITL review, fairness audits
-    
-    Lifecycle:
-      1. Written with explanation_status='pending'
-      2. narrate_explanation Celery task runs async
-      3. explanation_text filled in, status='done'
-    """
+DEMO_TRIP_CONTEXT = {
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "truck_id": "T12345",
+    "driver_age": 28,
+    "experience_level": "medium",
+    "historical_avg_score": 71.2,
+    "peer_group_avg": 68.4,
+    "duration_minutes": 165,
+    "distance_km": 78.3,
+    "window_count": 16,
+}
+
+# ==============================================================================
+# LAYER 3: SCORING AGENT — Outputs
+# ==============================================================================
+
+DEMO_SCORING_AGENT_TRIP_SCORE = {
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "driver_id": "DRV-ANON-7829",
+    "behaviour_score": 74.3,
+    "smoothness_score": 74.3,
+    "harsh_event_count": 4,
+    "smoothness_windows": 16,
+    "model_version": "xgb_v1.2",
+    "fairness_passed": True,
+    "disparate_impact": 0.98,
+    "scored_at": "2026-03-07T10:45:32Z",
+}
+
+DEMO_SCORING_AGENT_SHAP_EXPLANATION = {
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
     "top_features": [
         {
             "feature": "jerk_mean",
@@ -256,29 +600,14 @@ DEMO_SHAP_EXPLANATION = {
         "The driver's smooth acceleration and braking (low jerk, +0.25) "
         "combined with consistent speed control (+0.18) are the main drivers "
         "of the high score. Smooth cornering (+0.12) also helps. "
-        "Excessive idle time (-0.08) slightly reduces the score. "
-        "Overall: Good smoothness and control. Score is 74.3 (Good)."
+        "Excessive idle time (-0.08) slightly reduces the score."
     ),
 }
 
-DEMO_FAIRNESS_AUDIT = {
-    """
-    Destination: Postgres scoring.fairness_audit table (2 rows per trip)
-    Produced by: score_and_audit_trip() tool (from Fairness Auditor)
-    
-    Contains:
-      - Demographic parity checks (equal treatment across age groups)
-      - Equalized odds checks (equal false positive/negative rates)
-      - Disparate impact ratio (≥0.8 is fair)
-      - Bias score (0-1, lower is fairer)
-      - Recommendations for flag/review
-    
-    Used by: Compliance, HITL review, fairness monitoring
-    
-    Structure: Two rows per trip
-      Row 1: protected_attribute='route_type', metric_name='disparate_impact'
-      Row 2: protected_attribute='age_group', metric_name='equal_opportunity'
-    """
+DEMO_SCORING_AGENT_FAIRNESS_AUDIT = {
+    "trip_id": "TRIP-T12345-2026-03-07-08:00",
+    "protected_attribute": "driver_age",
+    "metric_name": "disparate_impact",
     "demographic_parity": "PASS",
     "equalized_odds": "PASS",
     "disparate_impact": 0.98,
@@ -292,101 +621,67 @@ DEMO_FAIRNESS_AUDIT = {
     ),
 }
 
-DEMO_TRIP_SCORE = {
-    """
-    Destination: Postgres scoring.trip_scores table
-    Produced by: score_and_audit_trip() tool
-    
-    Contains:
-      - Final behaviour_score (0-100, reward model)
-      - Smoothness score component
-      - Harsh event count (for context/auditing)
-      - Model version (for ML model tracking)
-      - Fairness pass/fail flag
-      - Timestamp (scored_at)
-    
-    Used by: Public API, Orchestrator decisions, Driver feedback, Analytics
-    
-    Lifecycle:
-      - Written once (immutable source of truth)
-      - Never updated (idempotent)
-      - One row per trip
-    """
-    "trip_id": "TRIP-T12345-2026-03-07-08:00",
-    "driver_id": "DRV-ANON-7829",
-    "behaviour_score": 74.3,
-    "smoothness_score": 74.3,
-    "harsh_event_count": 4,
-    "smoothness_windows": 6,
-    "model_version": "xgb_v1.2",
-    "fairness_passed": True,
-    "disparate_impact": 0.98,
-    "scored_at": "2026-03-07T10:45:00Z",
-}
-
 # ==============================================================================
-# EXTRACTED (Intermediate) — What extract_scoring_features() Produces
+# EVENT COLLECTIONS BY PRIORITY & AGENT
 # ==============================================================================
 
-DEMO_EXTRACTED_FEATURES = {
-    """
-    Produced by: extract_scoring_features() tool
-    Consumed by: score_and_audit_trip() tool
-    
-    Contains: Aggregated & calculated features from raw windows + events
-    
-    Smoothness features:
-      - Averages: jerk_mean_avg, speed_std_avg, mean_lateral_g_avg, mean_rpm_avg
-      - Peaks: jerk_max_peak, max_lateral_g_peak
-      - Ratios: idle_ratio (0-1)
-      - Counts: harsh_brake_count, harsh_brake_rate_per_100km
-    
-    Raw data pass-through:
-      - raw_smoothness_logs (for reference/auditing)
-      - raw_harsh_events (for reference/auditing)
-    """
-    "smoothness_features": {
-        "jerk_mean_avg": 0.0143,
-        "jerk_max_peak": 0.089,
-        "speed_std_avg": 12.37,
-        "mean_lateral_g_avg": 0.0283,
-        "max_lateral_g_peak": 0.22,
-        "mean_rpm_avg": 1693,
-        "idle_ratio": 0.1505,
-        "harsh_brake_count": 4,
-        "harsh_brake_rate_per_100km": 9.93,
-    },
-    "raw_smoothness_logs": {
-        "window_count": 6,
-        "windows": [],  # Full windows array from DEMO_SMOOTHNESS_LOGS
-    },
-    "raw_harsh_events": {
-        "event_count": 4,
-        "events": [],  # Full events array from DEMO_HARSH_EVENTS
-    },
-}
+ALL_CRITICAL_EVENTS = [
+    DEMO_EVENT_COLLISION,
+    DEMO_EVENT_ROLLOVER,
+    DEMO_EVENT_DRIVER_SOS,
+]
 
-# ==============================================================================
-# SUMMARY: Cross-Agent Data Flow
-# ==============================================================================
+ALL_HIGH_PRIORITY_EVENTS = [
+    DEMO_EVENT_HARSH_BRAKE,
+    DEMO_EVENT_HARD_ACCEL,
+    DEMO_EVENT_HARSH_CORNER,
+    DEMO_EVENT_VEHICLE_OFFLINE,
+    DEMO_EVENT_DRIVER_DISPUTE,
+]
 
-"""
-INCOMING (ScoringAgent consumes):
-  From Ingestion Tool:
-    → Redis trip:{id}:smoothness_logs ← DEMO_SMOOTHNESS_LOGS
-    → Redis trip:{id}:harsh_events ← DEMO_HARSH_EVENTS
-  
-  From Orchestrator/DB:
-    → Postgres public.trips (trip metadata) ← DEMO_TRIP_CONTEXT
-    → Postgres safety.trip_safety_summary (Safety Agent output) ← optional in Sprint 3
+ALL_MEDIUM_PRIORITY_EVENTS = [
+    DEMO_EVENT_SPEEDING,
+    DEMO_EVENT_DRIVER_FEEDBACK,
+]
 
-OUTGOING (ScoringAgent produces):
-  → Postgres scoring.trip_scores ← DEMO_TRIP_SCORE
-  → Postgres scoring.shap_explanations ← DEMO_SHAP_EXPLANATION
-  → Postgres scoring.fairness_audit ← DEMO_FAIRNESS_AUDIT
-  → Redis Pub/Sub trip:{id}:events (CompletionEvent) ← score + coaching flag
-  → Celery narrate_explanation task (async) ← update explanation_text
+ALL_LOW_PRIORITY_EVENTS = [
+    DEMO_EVENT_EXCESSIVE_IDLE,
+    DEMO_EVENT_SMOOTHNESS_LOG,
+    DEMO_EVENT_NORMAL_OPERATION,
+    DEMO_EVENT_START_OF_TRIP,
+    DEMO_EVENT_END_OF_TRIP,
+]
 
-INTERMEDIATE (extract_scoring_features produces):
-  → DEMO_EXTRACTED_FEATURES (consumed by score_and_audit_trip)
-"""
+ALL_TELEMATICS_EVENTS = (
+    ALL_CRITICAL_EVENTS
+    + ALL_HIGH_PRIORITY_EVENTS
+    + ALL_MEDIUM_PRIORITY_EVENTS
+    + ALL_LOW_PRIORITY_EVENTS
+)
+
+SAFETY_AGENT_EVENTS = [
+    DEMO_EVENT_COLLISION,
+    DEMO_EVENT_ROLLOVER,
+    DEMO_EVENT_HARSH_BRAKE,
+    DEMO_EVENT_HARD_ACCEL,
+    DEMO_EVENT_HARSH_CORNER,
+    DEMO_EVENT_VEHICLE_OFFLINE,
+    DEMO_EVENT_SPEEDING,
+]
+
+SCORING_AGENT_EVENTS = [
+    DEMO_EVENT_SMOOTHNESS_LOG,
+    DEMO_EVENT_HARSH_BRAKE,
+    DEMO_EVENT_HARSH_CORNER,
+    DEMO_EVENT_HARD_ACCEL,
+]
+
+SENTIMENT_AGENT_EVENTS = [
+    DEMO_EVENT_DRIVER_FEEDBACK,
+    DEMO_EVENT_DRIVER_DISPUTE,
+]
+
+ORCHESTRATOR_EVENTS = [
+    DEMO_EVENT_START_OF_TRIP,
+    DEMO_EVENT_END_OF_TRIP,
+]

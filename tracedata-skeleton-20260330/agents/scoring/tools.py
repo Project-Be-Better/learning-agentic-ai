@@ -1,8 +1,31 @@
 """
 Scoring Agent Tools — DEMO VERSION with Composite Score + Explain + Audit
 
-DATA FLOW & CONTRACTS:
+COMPREHENSIVE DATA CONTRACTS:
 ─────────────────────────────────────────────────────────────────────────────
+
+This module uses demo data from /tracedata/common/sample_data.py covering
+ALL 15 EVENT TYPES from the INPUT DATA ARCHITECTURE:
+
+CRITICAL (priority=0):
+  - collision, rollover, driver_sos
+
+HIGH (priority=3):
+  - harsh_brake, hard_accel, harsh_corner, vehicle_offline, driver_dispute
+
+MEDIUM (priority=6):
+  - speeding, driver_feedback
+
+LOW (priority=9):
+  - excessive_idle, smoothness_log, normal_operation, start_of_trip, end_of_trip
+
+ORCHESTRATOR LAYER:
+  - DEMO_TRIP_CONTEXT (trip metadata + demographics)
+
+SCORING AGENT OUTPUTS:
+  - DEMO_SCORING_AGENT_TRIP_SCORE
+  - DEMO_SCORING_AGENT_SHAP_EXPLANATION
+  - DEMO_SCORING_AGENT_FAIRNESS_AUDIT
 
 INPUT LAYER (Tools 1-3):
   1. get_trip_context(trip_id)
@@ -20,49 +43,13 @@ INPUT LAYER (Tools 1-3):
 
 FEATURE EXTRACTION LAYER (Tool 4):
   4. extract_scoring_features(smoothness_logs, harsh_events)
-     → {
-         "smoothness_features": {
-           "jerk_mean_avg": float,         ← avg across windows
-           "jerk_max_peak": float,         ← max jerk in any window
-           "speed_std_avg": float,         ← avg speed std dev
-           "mean_lateral_g_avg": float,    ← avg lateral g
-           "max_lateral_g_peak": float,    ← peak lateral g
-           "mean_rpm_avg": float,          ← avg rpm
-           "idle_ratio": float,            ← total idle / total trip time
-           "harsh_brake_count": int,       ← number of harsh brakes
-           "harsh_brake_rate_per_100km": float  ← events per 100 km
-         },
-         "raw_smoothness_logs": [...],     ← Pass through raw data
-         "raw_harsh_events": [...]         ← Pass through raw data
-       }
+     → aggregated features for XGBoost
 
 SCORING LAYER (Tool 5):
   5. score_and_audit_trip(trip_id, smoothness_features, demographics)
-     → {
-         "behaviour_score": float (0-100),
-         "score_label": str,
-         "score_breakdown": {...},
-         "shap_explanation": {...},
-         "fairness_audit": {...}
-       }
+     → {behaviour_score, shap_explanation, fairness_audit}
 
 ─────────────────────────────────────────────────────────────────────────────
-
-SAMPLE DATA:
-  See sample_data.py for demo data structures (shared with colleagues)
-
-  INCOMING (what ScoringAgent consumes):
-    - DEMO_TRIP_CONTEXT
-    - DEMO_SMOOTHNESS_LOGS
-    - DEMO_HARSH_EVENTS
-
-  OUTGOING (what ScoringAgent produces):
-    - DEMO_SHAP_EXPLANATION
-    - DEMO_FAIRNESS_AUDIT
-    - DEMO_TRIP_SCORE
-
-  INTERMEDIATE:
-    - DEMO_EXTRACTED_FEATURES
 """
 
 import json
@@ -70,13 +57,16 @@ from typing import Any
 
 from langchain_core.tools import tool
 
-# Import sample data from project root — shared contract documentation
-# Location: /tracedata/common/sample_data.py
+# Import comprehensive sample data from project root
+# Covers all 15 event types + agent outputs
 from ..sample_data import (
-    DEMO_FAIRNESS_AUDIT,
-    DEMO_HARSH_EVENTS,
-    DEMO_SHAP_EXPLANATION,
-    DEMO_SMOOTHNESS_LOGS,
+    # INGESTION LAYER — All event types
+    DEMO_EVENT_HARSH_BRAKE,
+    DEMO_EVENT_SMOOTHNESS_LOG,
+    DEMO_SCORING_AGENT_FAIRNESS_AUDIT,
+    DEMO_SCORING_AGENT_SHAP_EXPLANATION,
+    # SCORING AGENT OUTPUTS
+    DEMO_SCORING_AGENT_TRIP_SCORE,
     DEMO_TRIP_CONTEXT,
 )
 
@@ -113,7 +103,7 @@ def get_smoothness_logs(trip_id: str, redis_client: Any = None) -> str:
     """
     Get smoothness windows from Redis.
 
-    DEMO VERSION: Returns hardcoded 6 windows.
+    DEMO VERSION: Extracts from DEMO_EVENT_SMOOTHNESS_LOG.
     PROD VERSION: Reads from redis_client.lrange(f"trip:{trip_id}:smoothness_logs", 0, -1)
 
     Returns: Array of 6-16 smoothness windows with jerk, speed, RPM, idle metrics
@@ -122,9 +112,16 @@ def get_smoothness_logs(trip_id: str, redis_client: Any = None) -> str:
         trip_id: Unique trip identifier (ignored in demo)
         redis_client: Redis client instance (will be used in prod)
     """
-    return json.dumps(
-        {"window_count": len(DEMO_SMOOTHNESS_LOGS), "windows": DEMO_SMOOTHNESS_LOGS}
-    )
+    # DEMO: Extract smoothness window details from event
+    # In production, these would be multiple windows from Redis
+    smoothness_event = DEMO_EVENT_SMOOTHNESS_LOG
+    window_data = {
+        "window_index": 0,
+        "trip_meter_km": smoothness_event["trip_meter_km"],
+        **smoothness_event["details"],  # Contains speed, jerk, lateral, engine stats
+    }
+
+    return json.dumps({"window_count": 1, "windows": [window_data]})
 
 
 # ==============================================================================
@@ -137,7 +134,7 @@ def get_harsh_events(trip_id: str, redis_client: Any = None) -> str:
     """
     Get harsh events (braking, acceleration, cornering) from Redis.
 
-    DEMO VERSION: Returns hardcoded 4 harsh brakes.
+    DEMO VERSION: Extracts from DEMO_EVENT_HARSH_BRAKE and similar events.
     PROD VERSION: Reads from redis_client.lrange(f"trip:{trip_id}:harsh_events", 0, -1)
 
     Returns: Array of harsh events with event_type, peak_force_g, speed_at_event_kmh
@@ -146,9 +143,19 @@ def get_harsh_events(trip_id: str, redis_client: Any = None) -> str:
         trip_id: Unique trip identifier (ignored in demo)
         redis_client: Redis client instance (will be used in prod)
     """
-    return json.dumps(
-        {"event_count": len(DEMO_HARSH_EVENTS), "events": DEMO_HARSH_EVENTS}
-    )
+    # DEMO: Collect harsh events from ingestion layer
+    # In production, these would be multiple events from Redis
+    harsh_events = [
+        {
+            "event_id": DEMO_EVENT_HARSH_BRAKE["event_id"],
+            "event_type": DEMO_EVENT_HARSH_BRAKE["event_type"],
+            "trip_meter_km": DEMO_EVENT_HARSH_BRAKE["trip_meter_km"],
+            "peak_force_g": abs(DEMO_EVENT_HARSH_BRAKE["details"]["g_force_x"]),
+            "speed_at_event_kmh": DEMO_EVENT_HARSH_BRAKE["details"]["speed_kmh"],
+        },
+    ]
+
+    return json.dumps({"event_count": len(harsh_events), "events": harsh_events})
 
 
 # ==============================================================================
@@ -345,15 +352,12 @@ def score_and_audit_trip(
     except json.JSONDecodeError:
         return json.dumps({"error": "Invalid JSON input"})
 
-    smoothness_features_dict = features_data.get("smoothness_features", {})
-    demo_demographics = demo_data
-
     # DEMO VERSION: Return hardcoded (no modules needed)
     if xai_engine is None and fairness_auditor is None:
         return json.dumps(
             {
                 "trip_id": trip_id,
-                "behaviour_score": 74.3,
+                "behaviour_score": DEMO_SCORING_AGENT_TRIP_SCORE["behaviour_score"],
                 "score_label": "Good",
                 "score_breakdown": {
                     "jerk_component": 28.4,
@@ -361,8 +365,8 @@ def score_and_audit_trip(
                     "lateral_component": 19.1,
                     "engine_component": 8.6,
                 },
-                "shap_explanation": DEMO_SHAP_EXPLANATION,
-                "fairness_audit": DEMO_FAIRNESS_AUDIT,
+                "shap_explanation": DEMO_SCORING_AGENT_SHAP_EXPLANATION,
+                "fairness_audit": DEMO_SCORING_AGENT_FAIRNESS_AUDIT,
             }
         )
 
@@ -375,7 +379,7 @@ def score_and_audit_trip(
     return json.dumps(
         {
             "trip_id": trip_id,
-            "behaviour_score": 74.3,
+            "behaviour_score": DEMO_SCORING_AGENT_TRIP_SCORE["behaviour_score"],
             "score_label": "Good",
             "score_breakdown": {
                 "jerk_component": 28.4,
@@ -383,8 +387,8 @@ def score_and_audit_trip(
                 "lateral_component": 19.1,
                 "engine_component": 8.6,
             },
-            "shap_explanation": DEMO_SHAP_EXPLANATION,
-            "fairness_audit": DEMO_FAIRNESS_AUDIT,
+            "shap_explanation": DEMO_SCORING_AGENT_SHAP_EXPLANATION,
+            "fairness_audit": DEMO_SCORING_AGENT_FAIRNESS_AUDIT,
         }
     )
 
