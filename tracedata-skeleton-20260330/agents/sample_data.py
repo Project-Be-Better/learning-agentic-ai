@@ -7,20 +7,16 @@ plus outputs from each agent component.
 ORGANIZATION:
   1. INGESTION LAYER — TripEvent payloads (after Ingestion Tool processing)
      Organized by priority & event type from EVENT_MATRIX
-
   2. SCORING AGENT — Outputs (trip scores, explanations, fairness audits)
-
   3. SAFETY AGENT — Outputs (safety flags, enriched events) [Future]
-
   4. SENTIMENT AGENT — Outputs (wellbeing assessment) [Future]
-
   5. ORCHESTRATOR — Trip context and routing decisions
 
 COVERAGE:
-  ✅ 15 event types from EVENT_MATRIX (all scenarios)
-  ✅ Priority levels: CRITICAL, HIGH, MEDIUM, LOW
-  ✅ Sources: telematics_device, driver_app
-  ✅ Agent-specific outputs and transformations
+  - 15 event types from EVENT_MATRIX (all scenarios)
+  - Priority levels: CRITICAL, HIGH, MEDIUM, LOW
+  - Sources: telematics_device, driver_app
+  - Agent-specific outputs and transformations
 
 For detailed field definitions, see Input Data Architecture doc (A3).
 """
