@@ -1,33 +1,42 @@
 """
-Scoring Agent Tools — DEMO VERSION
+Scoring Agent Tools — DEMO VERSION with Composite Score + Explain + Audit
 
 DEMO APPROACH:
 - All tools return HARDCODED JSON responses
-- Same interface as production tools
+- Score, explanation, and audit always run together (one composite tool)
 - LLM can still reason about results
-- Perfect for demonstrating the pattern
+- Perfect for demonstrating the pattern with XAI + Fairness
+
+TOOLS:
+1. get_trip_context() — Read trip context
+2. get_smoothness_logs() — Read smoothness data
+3. get_harsh_events() — Read harsh events
+4. score_and_audit_trip() — COMPOSITE: Score + Explain (SHAP) + Audit (Fairness)
 
 TRANSITION PLAN:
 Stage 1 (Now):        Hardcoded responses
-Stage 4 (Later):      Swap hardcoded JSON for redis_client.get()
-Stage 5 (Later):      Swap hardcoded scoring for domain functions
+Stage 3 (Later):      Swap score + explanation for real XGBoost + SHAP
+Stage 4 (Later):      Swap fairness audit for real AIF360
+Stage 5 (Later):      Wire full pipeline
 
 This approach lets us DEMO the architecture without building everything at once.
 """
 
 import json
-from typing import Any
+from typing import Any, Dict
 
 from langchain_core.tools import tool
 
 # ==============================================================================
-# HARDCODED DATA (Demo Database)
+# HARDCODED DATA (Demo Database) — INPUT TOOLS
 # ==============================================================================
 
 DEMO_TRIP_CONTEXT = {
     "trip_id": "TRIP-T12345-2026-03-07-08:00",
     "driver_id": "DRV-ANON-7829",
     "truck_id": "T12345",
+    "driver_age": 28,
+    "experience_level": "medium",
     "historical_avg_score": 71.2,
     "peer_group_avg": 68.4,
     "duration_minutes": 62,
@@ -147,6 +156,66 @@ DEMO_HARSH_EVENTS = [
     },
 ]
 
+# ==============================================================================
+# HARDCODED DATA (Demo Database) — COMPOSITE TOOL (Score + Explain + Audit)
+# ==============================================================================
+
+DEMO_SHAP_EXPLANATION = {
+    "top_features": [
+        {
+            "feature": "jerk_mean",
+            "value": 0.015,
+            "shap_value": 0.25,
+            "contribution": "positive",
+            "interpretation": "Smooth acceleration and braking",
+        },
+        {
+            "feature": "speed_std_dev",
+            "value": 12.1,
+            "shap_value": 0.18,
+            "contribution": "positive",
+            "interpretation": "Consistent speed control",
+        },
+        {
+            "feature": "mean_lateral_g",
+            "value": 0.027,
+            "shap_value": 0.12,
+            "contribution": "positive",
+            "interpretation": "Smooth cornering technique",
+        },
+        {
+            "feature": "idle_ratio",
+            "value": 0.14,
+            "shap_value": -0.08,
+            "contribution": "negative",
+            "interpretation": "Excessive idle time",
+        },
+    ],
+    "base_score": 50.0,
+    "final_score": 74.3,
+    "narrative": (
+        "The driver's smooth acceleration and braking (low jerk, +0.25) "
+        "combined with consistent speed control (+0.18) are the main drivers "
+        "of the high score. Smooth cornering (+0.12) also helps. "
+        "Excessive idle time (-0.08) slightly reduces the score. "
+        "Overall: Good smoothness and control. Score is 74.3 (Good)."
+    ),
+}
+
+DEMO_FAIRNESS_AUDIT = {
+    "demographic_parity": "PASS",
+    "equalized_odds": "PASS",
+    "disparate_impact": 0.98,
+    "bias_score": 0.02,
+    "bias_detected": False,
+    "is_edge_case": False,
+    "recommendation": (
+        "Score is fair across demographic groups (age, experience level). "
+        "No evidence of systematic bias. Driver (age 28, medium experience) "
+        "scored consistently with peers in same demographic group."
+    ),
+}
+
 
 # ==============================================================================
 # TOOL 1: Get Trip Context
@@ -161,14 +230,13 @@ def get_trip_context(trip_id: str, redis_client: Any = None) -> str:
     DEMO VERSION: Returns hardcoded data.
     PROD VERSION: Reads from redis_client.get(f"trip:{trip_id}:context")
 
-    Returns: TripContext JSON with driver_id, truck_id, historical_avg_score,
-             peer_group_avg, duration_minutes, distance_km, window_count
+    Returns: TripContext JSON with driver_id, truck_id, demographics,
+             historical_avg_score, peer_group_avg, etc.
 
     Args:
         trip_id: Unique trip identifier (ignored in demo)
         redis_client: Redis client instance (will be used in prod)
     """
-    # Hardcoded response for demo
     return json.dumps(DEMO_TRIP_CONTEXT)
 
 
@@ -185,18 +253,12 @@ def get_smoothness_logs(trip_id: str, redis_client: Any = None) -> str:
     DEMO VERSION: Returns hardcoded 6 windows.
     PROD VERSION: Reads from redis_client.lrange(f"trip:{trip_id}:smoothness_logs", 0, -1)
 
-    Returns: Array of 6-16 smoothness windows, each with:
-    - window_index, trip_meter_km
-    - jerk_mean, jerk_max, jerk_std_dev
-    - speed_mean_kmh, speed_std_dev
-    - mean_lateral_g, max_lateral_g
-    - mean_rpm, idle_seconds
+    Returns: Array of 6-16 smoothness windows with jerk, speed, RPM, idle metrics
 
     Args:
         trip_id: Unique trip identifier (ignored in demo)
         redis_client: Redis client instance (will be used in prod)
     """
-    # Hardcoded response for demo
     return json.dumps(
         {"window_count": len(DEMO_SMOOTHNESS_LOGS), "windows": DEMO_SMOOTHNESS_LOGS}
     )
@@ -215,70 +277,97 @@ def get_harsh_events(trip_id: str, redis_client: Any = None) -> str:
     DEMO VERSION: Returns hardcoded 4 harsh brakes.
     PROD VERSION: Reads from redis_client.lrange(f"trip:{trip_id}:harsh_events", 0, -1)
 
-    Returns: Array of harsh events, each with:
-    - event_id, event_type (harsh_brake, harsh_accel, harsh_corner)
-    - trip_meter_km, peak_force_g, speed_at_event_kmh
+    Returns: Array of harsh events with event_type, peak_force_g, speed_at_event_kmh
 
     Args:
         trip_id: Unique trip identifier (ignored in demo)
         redis_client: Redis client instance (will be used in prod)
     """
-    # Hardcoded response for demo
     return json.dumps(
         {"event_count": len(DEMO_HARSH_EVENTS), "events": DEMO_HARSH_EVENTS}
     )
 
 
 # ==============================================================================
-# TOOL 4: Compute Behaviour Score (Domain Function)
+# TOOL 4: COMPOSITE TOOL — Score + Explain (SHAP) + Audit (Fairness)
 # ==============================================================================
 
 
 @tool
-def compute_behaviour_score(
-    jerk_mean_avg: float,
-    jerk_max_peak: float,
-    speed_std_avg: float,
-    mean_lateral_g_avg: float,
-    max_lateral_g_peak: float,
-    mean_rpm_avg: float,
-    idle_ratio: float,
+def score_and_audit_trip(
+    trip_id: str,
+    features: Dict = None,
+    demographics: Dict = None,
+    xai_engine: Any = None,
+    fairness_auditor: Any = None,
 ) -> str:
     """
-    Compute trip behaviour score from smoothness features.
+    Complete scoring operation: Score the trip + Explain with SHAP + Audit for fairness.
 
-    DEMO VERSION: Returns hardcoded score (74.3, Good).
-    PROD VERSION: Runs XGBoost model with features (Stage 3).
+    COMPOSITE TOOL: This is the main operation that always runs together.
 
-    Score is 0-100. Based on:
-    - Jerk (acceleration/braking smoothness): 40 pts
-    - Speed consistency: 25 pts
-    - Lateral smoothness (cornering): 20 pts
-    - Engine discipline: 15 pts
+    DEMO VERSION: Returns hardcoded score, explanation, and audit
+    PROD VERSION (Stage 3+):
+      - Compute behaviour score using XGBoost
+      - Explain with SHAP values
+      - Audit fairness with AIF360
+
+    Returns: JSON with three sections:
+      - behaviour_score: Numeric 0-100
+      - score_label: Excellent/Good/Average/Below Average/Poor
+      - shap_explanation: Top features contributing to score
+      - fairness_audit: Demographic bias checks
 
     Args:
-        jerk_mean_avg: Mean jerk across all windows (m/s³)
-        jerk_max_peak: Peak jerk in any window (m/s³)
-        speed_std_avg: Speed standard deviation (km/h)
-        mean_lateral_g_avg: Mean lateral acceleration (g)
-        max_lateral_g_peak: Peak lateral acceleration (g)
-        mean_rpm_avg: Mean RPM
-        idle_ratio: Ratio of idle time to total trip time
-
-    Returns: JSON with behaviour_score, score_label, breakdown
+        trip_id: Trip identifier
+        features: Feature dictionary (jerk_mean, speed_std_dev, etc.)
+        demographics: Demographics dict (driver_age, experience_level, etc.)
+        xai_engine: SHAPExplainer instance (will be injected by agent)
+        fairness_auditor: FairnessAuditor instance (will be injected by agent)
     """
-    # DEMO: Return hardcoded score
-    # (Demonstrates that LLM will still reason about this output)
+    # DEMO VERSION: Return hardcoded (no modules needed)
+    if xai_engine is None and fairness_auditor is None:
+        return json.dumps(
+            {
+                "trip_id": trip_id,
+                "behaviour_score": 74.3,
+                "score_label": "Good",
+                "score_breakdown": {
+                    "jerk_component": 28.4,
+                    "speed_component": 18.2,
+                    "lateral_component": 19.1,
+                    "engine_component": 8.6,
+                },
+                "shap_explanation": DEMO_SHAP_EXPLANATION,
+                "fairness_audit": DEMO_FAIRNESS_AUDIT,
+            }
+        )
+
+    # PROD VERSION (Stage 3+):
+    # score = xai_engine.explain(features) if xai_engine else {"score": 74.3}
+    # audit = fairness_auditor.audit(score["score"], demographics) if fairness_auditor else {}
+    # return json.dumps({
+    #     "trip_id": trip_id,
+    #     "behaviour_score": score["score"],
+    #     "score_label": score["label"],
+    #     "shap_explanation": score.get("explanation", {}),
+    #     "fairness_audit": audit
+    # })
+
+    # For now, demo version
     return json.dumps(
         {
+            "trip_id": trip_id,
             "behaviour_score": 74.3,
             "score_label": "Good",
-            "breakdown": {
+            "score_breakdown": {
                 "jerk_component": 28.4,
                 "speed_component": 18.2,
                 "lateral_component": 19.1,
                 "engine_component": 8.6,
             },
+            "shap_explanation": DEMO_SHAP_EXPLANATION,
+            "fairness_audit": DEMO_FAIRNESS_AUDIT,
         }
     )
 
@@ -291,5 +380,5 @@ SCORING_TOOLS = [
     get_trip_context,
     get_smoothness_logs,
     get_harsh_events,
-    compute_behaviour_score,
+    score_and_audit_trip,  # ← Composite tool: Score + Explain + Audit
 ]
