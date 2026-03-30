@@ -3,6 +3,8 @@ from typing import Any
 
 from langgraph.prebuilt import create_react_agent
 
+from agents.logger import get_agent_logger
+
 
 class Agent(ABC):
     """Base class for all TraceData agents."""
@@ -19,8 +21,15 @@ class Agent(ABC):
         self.tools = tools
         self.system_prompt = system_prompt
         self._agent = None
+        self.logger = get_agent_logger(agent_name)
+        self.logger.info(
+            "initialized agent | tools=%s | llm=%s",
+            [t.name for t in self.tools],
+            type(self.llm).__name__,
+        )
 
     def _create_agent(self):
+        self.logger.info("creating langgraph agent")
         return create_react_agent(
             model=self.llm,
             tools=self.tools,
@@ -28,9 +37,15 @@ class Agent(ABC):
         )
 
     def invoke(self, input_data: dict) -> dict:
+        self.logger.info(
+            "invoke start | keys=%s",
+            list(input_data.keys()),
+        )
         if self._agent is None:
             self._agent = self._create_agent()
-        return self._agent.invoke(input_data)
+        result = self._agent.invoke(input_data)
+        self.logger.info("invoke complete")
+        return result
 
     def __repr__(self) -> str:
         return f"{self.agent_name}(tools={len(self.tools)})"
