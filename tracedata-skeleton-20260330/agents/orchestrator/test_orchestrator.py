@@ -21,7 +21,7 @@ import pytest
 
 def test_eventmatrix_loaded():
     """Test that EventMatrix has all 18 events"""
-    from orchestrator.tools import EVENT_MATRIX
+    from models.event_config import EVENT_MATRIX
 
     assert len(EVENT_MATRIX) == 18, "EventMatrix should have 18 events"
 
@@ -42,7 +42,7 @@ def test_eventmatrix_loaded():
 
 def test_event_priorities():
     """Test that event priorities are correct"""
-    from orchestrator.tools import EVENT_MATRIX, Priority
+    from models.event_config import EVENT_MATRIX, Priority
 
     # Critical events (0)
     assert EVENT_MATRIX["collision"].priority == Priority.CRITICAL
@@ -60,7 +60,7 @@ def test_event_priorities():
 
 def test_action_mapping():
     """Test that action → agents mapping is correct"""
-    from orchestrator.tools import ACTION_TO_AGENTS
+    from .tools import ACTION_TO_AGENTS
 
     # Emergency actions
     assert ACTION_TO_AGENTS["Emergency Alert & 911"] == ["safety"]
@@ -85,7 +85,7 @@ def test_action_mapping():
 
 def test_get_event_config_harsh_brake():
     """Test get_event_config for harsh_brake event"""
-    from orchestrator.tools import get_event_config
+    from .tools import get_event_config
 
     result = get_event_config("harsh_brake")
     config = json.loads(result)
@@ -99,7 +99,7 @@ def test_get_event_config_harsh_brake():
 
 def test_get_event_config_collision():
     """Test get_event_config for collision (CRITICAL)"""
-    from orchestrator.tools import get_event_config
+    from .tools import get_event_config
 
     result = get_event_config("collision")
     config = json.loads(result)
@@ -112,7 +112,7 @@ def test_get_event_config_collision():
 
 def test_get_event_config_end_of_trip():
     """Test get_event_config for end_of_trip"""
-    from orchestrator.tools import get_event_config
+    from .tools import get_event_config
 
     result = get_event_config("end_of_trip")
     config = json.loads(result)
@@ -125,7 +125,7 @@ def test_get_event_config_end_of_trip():
 
 def test_get_event_config_unknown_event():
     """Test get_event_config with unknown event"""
-    from orchestrator.tools import get_event_config
+    from .tools import get_event_config
 
     result = get_event_config("unknown_event")
     error = json.loads(result)
@@ -143,7 +143,7 @@ def test_get_event_config_unknown_event():
 
 def test_coaching_rule_absolute_floor():
     """Test Rule 1: Absolute Floor (score < 60)"""
-    from orchestrator.tools import evaluate_coaching_rules
+    from .tools import evaluate_coaching_rules
 
     result = evaluate_coaching_rules(
         behaviour_score=54.2,  # Below 60
@@ -160,7 +160,7 @@ def test_coaching_rule_absolute_floor():
 
 def test_coaching_rule_trend_detection():
     """Test Rule 2: Negative Trend (|score - avg| > 10)"""
-    from orchestrator.tools import evaluate_coaching_rules
+    from .tools import evaluate_coaching_rules
 
     result = evaluate_coaching_rules(
         behaviour_score=65.0,
@@ -175,7 +175,7 @@ def test_coaching_rule_trend_detection():
 
 def test_coaching_rule_flagged_events():
     """Test Rule 3: Flagged Events Present"""
-    from orchestrator.tools import evaluate_coaching_rules
+    from .tools import evaluate_coaching_rules
 
     result = evaluate_coaching_rules(
         behaviour_score=78.5,
@@ -190,7 +190,7 @@ def test_coaching_rule_flagged_events():
 
 def test_coaching_rule_no_coaching():
     """Test when NO rules trigger (no coaching needed)"""
-    from orchestrator.tools import evaluate_coaching_rules
+    from .tools import evaluate_coaching_rules
 
     result = evaluate_coaching_rules(
         behaviour_score=78.5,  # > 60
@@ -207,7 +207,7 @@ def test_coaching_rule_no_coaching():
 
 def test_coaching_rule_all_rules_triggered():
     """Test when ALL rules trigger"""
-    from orchestrator.tools import evaluate_coaching_rules
+    from .tools import evaluate_coaching_rules
 
     result = evaluate_coaching_rules(
         behaviour_score=50.0,  # < 60 (Rule 1)
@@ -242,7 +242,7 @@ async def test_orchestrator_agent_initialization():
 
         assert orchestrator is not None
         assert orchestrator.agent_name == "OrchestratorAgent"
-        assert len(orchestrator.tools) >= 2
+        assert len(models.event_config) >= 2
     except Exception as e:
         pytest.skip(f"Skipping LLM test: {e}")
 
@@ -273,7 +273,7 @@ def test_orchestrator_invoke_with_trip():
 
 def test_event_config_to_agents_mapping():
     """Integration: EventConfig → Action → Agents"""
-    from orchestrator.tools import ACTION_TO_AGENTS, get_event_config
+    from models.event_config import ACTION_TO_AGENTS, get_event_config
 
     # Get harsh_brake config
     result = get_event_config("harsh_brake")
@@ -289,7 +289,7 @@ def test_event_config_to_agents_mapping():
 
 def test_routing_logic_critical_event():
     """Integration: Critical event routing"""
-    from orchestrator.tools import ACTION_TO_AGENTS, get_event_config
+    from models.event_config import ACTION_TO_AGENTS, get_event_config
 
     # Collision (CRITICAL)
     result = get_event_config("collision")
@@ -304,7 +304,7 @@ def test_routing_logic_critical_event():
 
 def test_routing_logic_harsh_event():
     """Integration: Harsh event routing"""
-    from orchestrator.tools import ACTION_TO_AGENTS, get_event_config
+    from models.event_config import ACTION_TO_AGENTS, get_event_config
 
     # Harsh brake (HIGH)
     result = get_event_config("harsh_brake")
@@ -320,7 +320,7 @@ def test_routing_logic_harsh_event():
 
 def test_routing_logic_low_priority_event():
     """Integration: Low priority event routing"""
-    from orchestrator.tools import ACTION_TO_AGENTS, get_event_config
+    from models.event_config import ACTION_TO_AGENTS, get_event_config
 
     # End of trip (LOW)
     result = get_event_config("end_of_trip")
@@ -340,7 +340,7 @@ def test_routing_logic_low_priority_event():
 
 def test_all_18_events():
     """Test all 18 events load and have routing"""
-    from orchestrator.tools import ACTION_TO_AGENTS, get_event_config
+    from models.event_config import ACTION_TO_AGENTS, get_event_config
 
     events = [
         "collision",
@@ -383,7 +383,7 @@ def test_all_18_events():
 
 def test_event_config_has_all_fields():
     """Test that EventConfig has all required fields"""
-    from orchestrator.tools import EVENT_MATRIX
+    from models.event_config import EVENT_MATRIX
 
     for event_name, event_config in EVENT_MATRIX.items():
         assert hasattr(event_config, "category")
@@ -394,7 +394,7 @@ def test_event_config_has_all_fields():
 
 def test_priority_values_valid():
     """Test that all priorities are valid values"""
-    from orchestrator.tools import EVENT_MATRIX, Priority
+    from models.event_config import EVENT_MATRIX, Priority
 
     valid_priorities = [
         Priority.CRITICAL,  # 0
@@ -409,7 +409,7 @@ def test_priority_values_valid():
 
 def test_action_values_valid():
     """Test that all actions are in the mapping"""
-    from orchestrator.tools import ACTION_TO_AGENTS, EVENT_MATRIX
+    from models.event_config import ACTION_TO_AGENTS, EVENT_MATRIX
 
     for event_name, event_config in EVENT_MATRIX.items():
         assert event_config.action in ACTION_TO_AGENTS
